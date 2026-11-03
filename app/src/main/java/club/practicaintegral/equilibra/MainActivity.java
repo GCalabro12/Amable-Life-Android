@@ -63,10 +63,31 @@ public class MainActivity extends Activity {
     private WebView web;
     private TextView cargando;
     private boolean cargada;
+    /** La app abierta, para que la ventana flotante pueda marcar tareas en la web. */
+    private static java.lang.ref.WeakReference<MainActivity> actual = new java.lang.ref.WeakReference<>(null);
+    /** Se pidió la ventana flotante pero faltaba el permiso: al volver de Ajustes se abre sola. */
+    private boolean quiereFlotante;
+
+    /** Ejecuta código en la web de la app (desde la ventana flotante). */
+    static void js(String codigo) {
+        MainActivity a = actual.get();
+        if (a != null && a.web != null) a.runOnUiThread(() -> a.web.evaluateJavascript(codigo, null));
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (quiereFlotante && FlotanteService.puede(this)) {
+            quiereFlotante = false;
+            FlotanteService.abrir(this);
+            web.evaluateJavascript("window.enviarFlotante && enviarFlotante(true)", null);
+        }
+    }
 
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        actual = new java.lang.ref.WeakReference<>(this);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(0xFF140F26);
 
@@ -351,6 +372,29 @@ public class MainActivity extends Activity {
 
         /** ¿Está instalada PC & Body-mind? Entonces es ella la que cuenta los pasos. */
         @JavascriptInterface public boolean pcInstalada() { return StepService.pcInstalada(MainActivity.this); }
+
+        // ---------- Ventana flotante de Focus (encima de las demás apps) ----------
+        /** Abre la ventana flotante. Si falta el permiso, abre Ajustes para darlo y devuelve false. */
+        @JavascriptInterface public boolean abrirFlotante() {
+            if (!FlotanteService.puede(MainActivity.this)) {
+                quiereFlotante = true;
+                runOnUiThread(() -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                    } catch (RuntimeException e) {
+                        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+                    }
+                });
+                return false;
+            }
+            runOnUiThread(() -> FlotanteService.abrir(MainActivity.this));
+            return true;
+        }
+
+        /** Lo que enseña la ventana flotante: {tit, fin, tareas:[{t, i, ok}]} */
+        @JavascriptInterface public void flotante(String json) { FlotanteService.nuevoEstado(json); }
+
+        @JavascriptInterface public void cerrarFlotante() { runOnUiThread(() -> FlotanteService.cerrar(MainActivity.this)); }
 
         @JavascriptInterface public void abrirPC() {
             runOnUiThread(() -> {
