@@ -77,12 +77,22 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Recordatorios.appVisible = true;
         if (quiereFlotante && FlotanteService.puede(this)) {
             quiereFlotante = false;
             FlotanteService.abrir(this);
             web.evaluateJavascript("window.enviarFlotante && enviarFlotante(true)", null);
         }
     }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        Recordatorios.appVisible = false;
+    }
+
+    /** Ya se pidió el permiso de notificaciones para los recordatorios (una vez por apertura). */
+    private boolean pedidoAvisos;
 
     @Override
     protected void onCreate(Bundle saved) {
@@ -228,6 +238,7 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code == 2) return;   // permiso de notificaciones para los recordatorios del calendario
         StepService.start(this);
         web.evaluateJavascript("window.nativeRefresh && window.nativeRefresh()", null);
     }
@@ -393,6 +404,17 @@ public class MainActivity extends Activity {
 
         /** Lo que enseña la ventana flotante: {tit, fin, tareas:[{t, i, ok}]} */
         @JavascriptInterface public void flotante(String json) { FlotanteService.nuevoEstado(json); }
+
+        /** Recordatorios del calendario con la app cerrada (APK 2.38): [{id, at, tit, txt}] de los próximos días. */
+        @JavascriptInterface public void programarRecordatorios(String json) {
+            Recordatorios.programar(MainActivity.this, json);
+            boolean hay = json != null && json.length() > 2;
+            if (hay && !pedidoAvisos && Build.VERSION.SDK_INT >= 33
+                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                pedidoAvisos = true;
+                runOnUiThread(() -> requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2));
+            }
+        }
 
         @JavascriptInterface public void cerrarFlotante() { runOnUiThread(() -> FlotanteService.cerrar(MainActivity.this)); }
 
