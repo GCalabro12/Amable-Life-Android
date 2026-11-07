@@ -148,7 +148,7 @@ public class Recordatorios extends BroadcastReceiver {
                 .addAction(new Notification.Action.Builder(null, "Enterado", boton(c, PARAR, intent, 0)).build())
                 .addAction(new Notification.Action.Builder(null, "Posponer 5 min", boton(c, POSPONER, intent, 5)).build());
         if (intent.getBooleanExtra("ul", true))
-            b.addAction(new Notification.Action.Builder(null, "Completado", boton(c, COMPLETAR, intent, 0)).build());
+            b.addAction(new Notification.Action.Builder(null, "Tarea completada", boton(c, COMPLETAR, intent, 0)).build());
         int dur = intent.getIntExtra("dur", 60);
         if (dur > 0) b.setTimeoutAfter(dur * 1000L);   // lo que elegiste en «Duración»; 0 = hasta que la apagues
         return b.build();

@@ -77,11 +77,10 @@ public class AlarmaActivity extends Activity {
         TextView t = texto(tit == null ? "" : tit, 30, Color.WHITE, true); t.setPadding(0, 0, 0, dp(10)); col.addView(t);
         TextView c = texto(txt == null ? "" : txt, 18, Color.parseColor("#e9e4ff"), false); c.setPadding(0, 0, 0, dp(36)); col.addView(c);
 
-        if (ultima) {
-            Button ok = boton("Completado", Color.parseColor("#16a34a"), 0);
-            ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, "Tarea completada", Toast.LENGTH_SHORT).show(); finish(); });
-            col.addView(ok);
-        }
+        // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
+        Button ent = boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
+        ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
+        col.addView(ent);
 
         Button pos = boton("Posponer", Color.parseColor("#8b5cf6"), 0);
         GridLayout rej = new GridLayout(this);
@@ -104,9 +103,11 @@ public class AlarmaActivity extends Activity {
         col.addView(pos);
         col.addView(rej, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        Button ent = boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
-        ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
-        col.addView(ent);
+        if (ultima) {
+            Button ok = boton("Tarea completada", Color.parseColor("#16a34a"), 0);
+            ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, "Tarea completada", Toast.LENGTH_SHORT).show(); finish(); });
+            col.addView(ok);
+        }
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
