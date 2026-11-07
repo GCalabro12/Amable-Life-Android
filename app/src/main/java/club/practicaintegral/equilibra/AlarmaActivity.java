@@ -92,10 +92,10 @@ public class AlarmaActivity extends Activity {
     private void pintar(Intent in) {
         String tit = in.getStringExtra("tit"), txt = in.getStringExtra("txt"), id = in.getStringExtra("id");
         boolean ultima = in.getBooleanExtra("ul", true);
-        long ini = 0; boolean todo = false; String cuando = "", colTarea = "";
+        long ini = 0; boolean todo = false; String cuando = "", colTarea = "", entTxt = "";
         try {
             org.json.JSONObject x = new org.json.JSONObject(in.getStringExtra("extra") == null ? "{}" : in.getStringExtra("extra"));
-            ini = x.optLong("ini", 0); todo = x.optBoolean("todo", false); cuando = x.optString("cuando", ""); colTarea = x.optString("col", "");
+            ini = x.optLong("ini", 0); todo = x.optBoolean("todo", false); cuando = x.optString("cuando", ""); colTarea = x.optString("col", ""); entTxt = x.optString("ent", "");
         } catch (Exception ignored) {}
         String falta = faltaTxt(ini, todo);
 
@@ -135,6 +135,8 @@ public class AlarmaActivity extends Activity {
         Button ent = boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
         ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
         col.addView(ent);
+        // 2.50 (Gustavo): en pequeño, qué quita Enterado («Solo quita este aviso de 1 hora antes»)
+        if (!entTxt.isEmpty()) { TextView et = texto(entTxt, 13, Color.parseColor("#cfc6ec"), false); et.setPadding(0, dp(2), 0, dp(6)); col.addView(et); }
 
         Button pos = boton("Posponer", Color.parseColor("#8b5cf6"), 0);
         GridLayout rej = new GridLayout(this);

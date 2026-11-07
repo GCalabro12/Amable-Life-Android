@@ -62,7 +62,7 @@ public class Recordatorios extends BroadcastReceiver {
         // 2.49: lo que necesita la ventana para escribir «Falta 1 hora para» y «Tarea para realizar a las 17:30» (como la web)
         String extra = "";
         try { extra = new JSONObject().put("ini", r.optLong("ini", 0)).put("todo", r.optBoolean("todo", false))
-                .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).toString(); } catch (Exception ignored) {}
+                .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).put("ent", r.optString("ent", "")).toString(); } catch (Exception ignored) {}
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
                 r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true), extra);
         long at = r.optLong("at", 0);
@@ -197,6 +197,7 @@ public class Recordatorios extends BroadcastReceiver {
                 JSONObject x = new JSONObject(orig.getStringExtra("extra") == null ? "{}" : orig.getStringExtra("extra"));
                 java.util.Iterator<String> it = x.keys();
                 while (it.hasNext()) { String key = it.next(); r.put(key, x.get(key)); }
+                r.put("ent", "Solo quita este aviso pospuesto");   // 2.50
             } catch (Exception ignored) {}
             programarUno(c, r);
         } catch (Exception ignored) {}
