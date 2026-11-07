@@ -60,7 +60,7 @@ public class Recordatorios extends BroadcastReceiver {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
-                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true));
+                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60));
         long at = r.optLong("at", 0);
         boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
         if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
@@ -72,13 +72,14 @@ public class Recordatorios extends BroadcastReceiver {
         if (am == null) return;
         try {
             JSONArray a = new JSONArray(json);
-            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true));
+            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true, 60));
         } catch (Exception ignored) {}
     }
 
-    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul) {
+    /** dur (APK 2.42): segundos que suena la alarma (15, 30, 60); 0 = hasta que la apagues. */
+    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul, int dur) {
         Intent i = new Intent(c, Recordatorios.class).setAction("club.practicaintegral.equilibra.RECORDATORIO." + id);
-        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul);
+        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul).putExtra("dur", dur);
         return PendingIntent.getBroadcast(c, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
@@ -123,11 +124,12 @@ public class Recordatorios extends BroadcastReceiver {
                 .setFullScreenIntent(pantalla, true)   // 2.41: con la pantalla apagada o bloqueada, la ventana grande
                 .setDeleteIntent(boton(c, PARAR, intent, 0))
                 .setAutoCancel(true)
-                .setTimeoutAfter(60000)   // suena como mucho un minuto
                 .addAction(new Notification.Action.Builder(null, "Enterado", boton(c, PARAR, intent, 0)).build())
                 .addAction(new Notification.Action.Builder(null, "Posponer 5 min", boton(c, POSPONER, intent, 5)).build());
         if (intent.getBooleanExtra("ul", true))
             b.addAction(new Notification.Action.Builder(null, "Completado", boton(c, COMPLETAR, intent, 0)).build());
+        int dur = intent.getIntExtra("dur", 60);
+        if (dur > 0) b.setTimeoutAfter(dur * 1000L);   // lo que elegiste en «Duración del sonido»; 0 = hasta que la apagues
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT;   // el sonido se repite hasta que la paras, la abres o pasa el minuto
         try { nm.notify(nid(id), n); } catch (SecurityException ignored) {}
@@ -155,7 +157,7 @@ public class Recordatorios extends BroadcastReceiver {
             if (txt != null && !txt.startsWith("Pospuesto")) txt = "Pospuesto · " + txt;
             programarUno(c, new JSONObject().put("id", base + "|pos").put("at", System.currentTimeMillis() + min * 60000L)
                     .put("tit", orig.getStringExtra("tit")).put("txt", txt).put("ev", orig.getStringExtra("ev"))
-                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)));
+                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)).put("dur", orig.getIntExtra("dur", 60)));
         } catch (Exception ignored) {}
     }
 
