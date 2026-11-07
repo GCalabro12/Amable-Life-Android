@@ -435,6 +435,8 @@ public class MainActivity extends Activity {
         /** Con la app en pantalla: suena la alarma con el sonido elegido en el teléfono (segundos) y se para. */
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
+        /** APK 2.44: igual, con subida gradual en 5 segundos. */
+        @JavascriptInterface public void sonarAlarmaG(int segundos, boolean gradual) { Recordatorios.sonar(MainActivity.this, segundos, gradual); }
 
         /** APK 2.41: posponer desde la ventana de la web; lo programa el teléfono (suena aunque cierres la app). */
         @JavascriptInterface public void posponerAlarma(String json) {

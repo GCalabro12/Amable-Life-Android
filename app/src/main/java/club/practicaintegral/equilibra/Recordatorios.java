@@ -60,7 +60,7 @@ public class Recordatorios extends BroadcastReceiver {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
-                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60));
+                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true));
         long at = r.optLong("at", 0);
         boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
         if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
@@ -72,14 +72,14 @@ public class Recordatorios extends BroadcastReceiver {
         if (am == null) return;
         try {
             JSONArray a = new JSONArray(json);
-            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true, 60));
+            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true, 60, true));
         } catch (Exception ignored) {}
     }
 
     /** dur (APK 2.42): segundos que suena la alarma (15, 30, 60); 0 = hasta que la apagues. */
-    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul, int dur) {
+    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul, int dur, boolean gr) {
         Intent i = new Intent(c, Recordatorios.class).setAction("club.practicaintegral.equilibra.RECORDATORIO." + id);
-        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul).putExtra("dur", dur);
+        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul).putExtra("dur", dur).putExtra("gr", gr);
         return PendingIntent.getBroadcast(c, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
@@ -107,14 +107,35 @@ public class Recordatorios extends BroadcastReceiver {
             }
             return;
         }
-        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm == null) return;
-        crearCanal(c);
+        Intent ventana = new Intent(c, AlarmaActivity.class).putExtras(intent)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+        boolean servicio = false;
+        try {   // 2.44: el servicio pone el aviso y toca el sonido (gradual si lo elegiste)
+            Intent sv = new Intent(c, AlarmaService.class).putExtras(intent);
+            if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(sv); else c.startService(sv);
+            servicio = true;
+        } catch (Exception ignored) {}
+        if (!servicio) {   // si Android no deja arrancar el servicio: el aviso de antes, con el sonido del canal
+            NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            crearCanal(c);
+            Notification n = construir(c, intent, CANAL_ALARMA);
+            n.flags |= Notification.FLAG_INSISTENT;
+            try { nm.notify(nid(intent.getStringExtra("id")), n); } catch (SecurityException ignored) {}
+        }
+        // Con el móvil desbloqueado Android solo enseña el aviso de arriba: si la app puede «mostrarse sobre otras apps»
+        // (el permiso de la ventana flotante), se abre directamente la ventana grande.
+        if (Settings.canDrawOverlays(c)) { try { c.startActivity(ventana); } catch (Exception ignored) {} }
+    }
+
+    /** El aviso de la alarma: ventana grande, Enterado, Posponer 5 min y, en la última, Completado. */
+    static Notification construir(Context c, Intent intent, String canal) {
+        String id = intent.getStringExtra("id");
         Intent ventana = new Intent(c, AlarmaActivity.class).putExtras(intent)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
         PendingIntent pantalla = PendingIntent.getActivity(c, ("v" + id).hashCode(), ventana,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Builder b = new Notification.Builder(c, CANAL_ALARMA)
+        Notification.Builder b = new Notification.Builder(c, canal)
                 .setSmallIcon(R.drawable.ic_stat_pasos)
                 .setContentTitle(intent.getStringExtra("tit"))
                 .setContentText(intent.getStringExtra("txt"))
@@ -129,13 +150,22 @@ public class Recordatorios extends BroadcastReceiver {
         if (intent.getBooleanExtra("ul", true))
             b.addAction(new Notification.Action.Builder(null, "Completado", boton(c, COMPLETAR, intent, 0)).build());
         int dur = intent.getIntExtra("dur", 60);
-        if (dur > 0) b.setTimeoutAfter(dur * 1000L);   // lo que elegiste en «Duración del sonido»; 0 = hasta que la apagues
-        Notification n = b.build();
-        n.flags |= Notification.FLAG_INSISTENT;   // el sonido se repite hasta que la paras, la abres o pasa el minuto
-        try { nm.notify(nid(id), n); } catch (SecurityException ignored) {}
-        // Con el móvil desbloqueado Android solo enseña el aviso de arriba: si la app puede «mostrarse sobre otras apps»
-        // (el permiso de la ventana flotante), se abre directamente la ventana grande.
-        if (Settings.canDrawOverlays(c)) { try { c.startActivity(ventana); } catch (Exception ignored) {} }
+        if (dur > 0) b.setTimeoutAfter(dur * 1000L);   // lo que elegiste en «Duración»; 0 = hasta que la apagues
+        return b.build();
+    }
+
+    /** 2.44: canal del aviso SIN sonido (el sonido lo toca AlarmaService, subiendo poco a poco). */
+    static final String CANAL_AVISO = "alarmas_aviso";
+    static void crearCanalAviso(Context c) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || nm.getNotificationChannel(CANAL_AVISO) != null) return;
+        NotificationChannel ch = new NotificationChannel(CANAL_AVISO, "Ventana de las alarmas", NotificationManager.IMPORTANCE_HIGH);
+        ch.setDescription("El aviso y la ventana de tus recordatorios (el sonido se elige en «Alarmas del calendario»)");
+        ch.setSound(null, null);
+        ch.enableVibration(true);
+        ch.setVibrationPattern(new long[]{0, 600, 300, 600, 300, 600});
+        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(ch);
     }
 
     static int nid(String id) { return id == null ? 7 : id.hashCode(); }
@@ -145,6 +175,7 @@ public class Recordatorios extends BroadcastReceiver {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(nid(id));
         parar();
+        try { c.stopService(new Intent(c, AlarmaService.class)); } catch (Exception ignored) {}
     }
 
     /** Posponer N minutos: se quita y se vuelve a programar (sigue siendo la última si lo era). */
@@ -157,7 +188,7 @@ public class Recordatorios extends BroadcastReceiver {
             if (txt != null && !txt.startsWith("Pospuesto")) txt = "Pospuesto · " + txt;
             programarUno(c, new JSONObject().put("id", base + "|pos").put("at", System.currentTimeMillis() + min * 60000L)
                     .put("tit", orig.getStringExtra("tit")).put("txt", txt).put("ev", orig.getStringExtra("ev"))
-                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)).put("dur", orig.getIntExtra("dur", 60)));
+                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)).put("dur", orig.getIntExtra("dur", 60)).put("gr", orig.getBooleanExtra("gr", true)));
         } catch (Exception ignored) {}
     }
 
@@ -211,7 +242,9 @@ public class Recordatorios extends BroadcastReceiver {
     /** Con la app en pantalla, la web pide sonar la alarma con el sonido del teléfono (como mucho un minuto). */
     private static android.media.Ringtone tono;
     private static final android.os.Handler manejador = new android.os.Handler(android.os.Looper.getMainLooper());
-    static synchronized void sonar(Context c, int segundos) {
+    static synchronized void sonar(Context c, int segundos) { sonar(c, segundos, false); }
+    /** gradual (2.44): el volumen sube de casi nada al máximo en 5 segundos. */
+    static synchronized void sonar(Context c, int segundos, boolean gradual) {
         parar();
         try {
             tono = RingtoneManager.getRingtone(c.getApplicationContext(), sonidoElegido(c));
@@ -219,8 +252,16 @@ public class Recordatorios extends BroadcastReceiver {
             tono.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
             if (Build.VERSION.SDK_INT >= 28) tono.setLooping(true);
-            tono.play();
             manejador.removeCallbacksAndMessages(null);
+            if (gradual && Build.VERSION.SDK_INT >= 28) {
+                tono.setVolume(0.05f);
+                final android.media.Ringtone t = tono;
+                for (int i = 1; i <= 20; i++) {
+                    final float v = 0.05f + 0.95f * i / 20f;
+                    manejador.postDelayed(() -> { try { if (t == tono) t.setVolume(v); } catch (Exception ignored) {} }, i * 250L);
+                }
+            }
+            tono.play();
             manejador.postDelayed(Recordatorios::parar, Math.max(3, segundos) * 1000L);
         } catch (Exception ignored) {}
     }

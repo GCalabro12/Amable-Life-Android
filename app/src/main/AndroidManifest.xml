@@ -62,6 +62,15 @@
                 android:value="Ventana flotante con el bloque de tiempo actual y sus tareas, encima de las demás apps" />
         </service>
 
+        <service
+            android:name=".AlarmaService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Alarma de un recordatorio del calendario: suena el tono elegido hasta que la persona la para" />
+        </service>
+
         <activity
             android:name=".AlarmaActivity"
             android:exported="false"
