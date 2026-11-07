@@ -272,6 +272,7 @@ public class Recordatorios extends BroadcastReceiver {
         }
         if (mp == null) return;
         manejador.removeCallbacksAndMessages(null);
+        subirVolumen(c, gradual);
         if (gradual) {
             final android.media.MediaPlayer t = mp;
             for (int i = 1; i <= 20; i++) {
@@ -287,6 +288,38 @@ public class Recordatorios extends BroadcastReceiver {
             try { mp.release(); } catch (Exception ignored) {}
             mp = null;
         }
+        devolverVolumen();
+    }
+
+    /** 2.47 (Gustavo): si el volumen de alarma del teléfono está bajo, mientras suena se sube poco a poco (en 5 s si es
+     *  gradual, si no de golpe) hasta al menos el 75 %; al pararla se deja como estaba. */
+    private static int volAntes = -1;
+    private static android.media.AudioManager audio;
+    private static void subirVolumen(Context c, boolean gradual) {
+        try {
+            android.media.AudioManager am = (android.media.AudioManager) c.getSystemService(Context.AUDIO_SERVICE);
+            if (am == null) return;
+            int max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_ALARM);
+            int ahora = am.getStreamVolume(android.media.AudioManager.STREAM_ALARM);
+            int meta = (int) Math.ceil(max * 0.75);
+            if (ahora >= meta) return;
+            if (volAntes < 0) volAntes = ahora;
+            audio = am;
+            int pasos = gradual ? Math.max(1, meta - ahora) : 1;
+            for (int i = 1; i <= pasos; i++) {
+                final int v = ahora + (meta - ahora) * i / pasos;
+                long cuando = gradual ? 5000L * i / pasos : 0;
+                manejador.postDelayed(() -> {
+                    try { if (mp != null) am.setStreamVolume(android.media.AudioManager.STREAM_ALARM, v, 0); } catch (Exception ignored) {}
+                }, cuando);
+            }
+        } catch (Exception ignored) {}
+    }
+    private static void devolverVolumen() {
+        if (volAntes >= 0 && audio != null) {
+            try { audio.setStreamVolume(android.media.AudioManager.STREAM_ALARM, volAntes, 0); } catch (Exception ignored) {}
+        }
+        volAntes = -1;
     }
 
     private static PendingIntent boton(Context c, String accion, Intent orig, int min) {
