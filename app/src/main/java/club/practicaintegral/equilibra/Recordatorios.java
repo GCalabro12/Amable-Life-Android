@@ -239,35 +239,54 @@ public class Recordatorios extends BroadcastReceiver {
         return u != null ? u : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
     }
 
-    /** Con la app en pantalla, la web pide sonar la alarma con el sonido del teléfono (como mucho un minuto). */
-    private static android.media.Ringtone tono;
+    /** Con la app en pantalla, la web pide sonar la alarma con el sonido del teléfono (como mucho un minuto).
+     *  2.45 (Gustavo: «Probar no funciona en el móvil»): con MediaPlayer en el hilo principal (antes Ringtone desde el
+     *  puente de la web), y si el sonido elegido no se puede abrir, el de alarma, el de llamada o el de avisos del teléfono. */
+    private static android.media.MediaPlayer mp;
     private static final android.os.Handler manejador = new android.os.Handler(android.os.Looper.getMainLooper());
-    static synchronized void sonar(Context c, int segundos) { sonar(c, segundos, false); }
+    static void sonar(Context c, int segundos) { sonar(c, segundos, false); }
     /** gradual (2.44): el volumen sube de casi nada al máximo en 5 segundos. */
-    static synchronized void sonar(Context c, int segundos, boolean gradual) {
+    static void sonar(Context c, int segundos, boolean gradual) {
+        final Context app = c.getApplicationContext();
+        manejador.post(() -> sonarYa(app, segundos, gradual));
+    }
+    private static synchronized void sonarYa(Context c, int segundos, boolean gradual) {
         parar();
-        try {
-            tono = RingtoneManager.getRingtone(c.getApplicationContext(), sonidoElegido(c));
-            if (tono == null) return;
-            tono.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-            if (Build.VERSION.SDK_INT >= 28) tono.setLooping(true);
-            manejador.removeCallbacksAndMessages(null);
-            if (gradual && Build.VERSION.SDK_INT >= 28) {
-                tono.setVolume(0.05f);
-                final android.media.Ringtone t = tono;
-                for (int i = 1; i <= 20; i++) {
-                    final float v = 0.05f + 0.95f * i / 20f;
-                    manejador.postDelayed(() -> { try { if (t == tono) t.setVolume(v); } catch (Exception ignored) {} }, i * 250L);
-                }
+        android.net.Uri[] us = {sonidoElegido(c), RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE), RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)};
+        for (android.net.Uri u : us) {
+            if (u == null) continue;
+            android.media.MediaPlayer m = new android.media.MediaPlayer();
+            try {
+                m.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+                m.setDataSource(c, u);
+                m.setLooping(true);
+                m.prepare();
+                float v0 = gradual ? 0.05f : 1f;
+                m.setVolume(v0, v0);
+                m.start();
+                mp = m;
+                break;
+            } catch (Exception e) { try { m.release(); } catch (Exception ignored) {} }
+        }
+        if (mp == null) return;
+        manejador.removeCallbacksAndMessages(null);
+        if (gradual) {
+            final android.media.MediaPlayer t = mp;
+            for (int i = 1; i <= 20; i++) {
+                final float v = 0.05f + 0.95f * i / 20f;
+                manejador.postDelayed(() -> { try { if (t == mp) t.setVolume(v, v); } catch (Exception ignored) {} }, i * 250L);
             }
-            tono.play();
-            manejador.postDelayed(Recordatorios::parar, Math.max(3, segundos) * 1000L);
-        } catch (Exception ignored) {}
+        }
+        manejador.postDelayed(Recordatorios::parar, Math.max(3, segundos) * 1000L);
     }
     static synchronized void parar() {
-        try { if (tono != null) tono.stop(); } catch (Exception ignored) {}
-        tono = null;
+        if (mp != null) {
+            try { mp.stop(); } catch (Exception ignored) {}
+            try { mp.release(); } catch (Exception ignored) {}
+            mp = null;
+        }
     }
 
     private static PendingIntent boton(Context c, String accion, Intent orig, int min) {

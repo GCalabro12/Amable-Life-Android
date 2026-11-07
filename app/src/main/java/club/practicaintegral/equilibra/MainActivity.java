@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         Recordatorios.appVisible = true;
-        if (web != null) web.evaluateJavascript("window.aplicarAlarmas && aplicarAlarmas()", null);
+        if (web != null) web.evaluateJavascript("window.aplicarAlarmas && aplicarAlarmas(); window.revisarPermisos && setTimeout(() => revisarPermisos(), 600)", null);
         if (quiereFlotante && FlotanteService.puede(this)) {
             quiereFlotante = false;
             FlotanteService.abrir(this);
@@ -92,6 +92,8 @@ public class MainActivity extends Activity {
         Recordatorios.appVisible = false;
     }
 
+    /** 2.45: ya se pidió el permiso de notificaciones desde la ventana de permisos (la segunda vez se abre el ajuste). */
+    private boolean pedidoNotifPermiso;
     /** Ya se pidió el permiso de notificaciones para los recordatorios (una vez por apertura). */
     private boolean pedidoAvisos;
 
@@ -435,6 +437,39 @@ public class MainActivity extends Activity {
         /** Con la app en pantalla: suena la alarma con el sonido elegido en el teléfono (segundos) y se para. */
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
+        /** APK 2.45 (Gustavo): qué permisos de las alarmas faltan, para la ventana «Activa estos permisos» de la web. */
+        @JavascriptInterface public String permisos() {
+            boolean sobre = Settings.canDrawOverlays(MainActivity.this);
+            boolean notif = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+            boolean hayPantalla = Build.VERSION.SDK_INT >= 34, pantalla = true;
+            if (hayPantalla) {
+                android.app.NotificationManager nm = getSystemService(android.app.NotificationManager.class);
+                pantalla = nm != null && nm.canUseFullScreenIntent();
+            }
+            return "{\"sobre\":" + sobre + ",\"notif\":" + notif + ",\"pantalla\":" + pantalla + ",\"hayPantalla\":" + hayPantalla + "}";
+        }
+        /** Abre el ajuste del teléfono de ese permiso (o lo pide, las notificaciones la primera vez). */
+        @JavascriptInterface public void abrirPermiso(String cual) {
+            runOnUiThread(() -> {
+                try {
+                    if ("sobre".equals(cual)) {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+                    } else if ("notif".equals(cual)) {
+                        if (Build.VERSION.SDK_INT >= 33 && !pedidoNotifPermiso) {
+                            pedidoNotifPermiso = true;
+                            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 3);
+                        } else {
+                            startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()));
+                        }
+                    } else if ("pantalla".equals(cual) && Build.VERSION.SDK_INT >= 34) {
+                        startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + getPackageName())));
+                    }
+                } catch (Exception e) {
+                    try { startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) {}
+                }
+            });
+        }
+
         /** APK 2.44: igual, con subida gradual en 5 segundos. */
         @JavascriptInterface public void sonarAlarmaG(int segundos, boolean gradual) { Recordatorios.sonar(MainActivity.this, segundos, gradual); }
 
