@@ -59,8 +59,12 @@ public class Recordatorios extends BroadcastReceiver {
     static void programarUno(Context c, JSONObject r) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
+        // 2.49: lo que necesita la ventana para escribir «Falta 1 hora para» y «Tarea para realizar a las 17:30» (como la web)
+        String extra = "";
+        try { extra = new JSONObject().put("ini", r.optLong("ini", 0)).put("todo", r.optBoolean("todo", false))
+                .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).toString(); } catch (Exception ignored) {}
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
-                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true));
+                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true), extra);
         long at = r.optLong("at", 0);
         boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
         if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
@@ -72,14 +76,14 @@ public class Recordatorios extends BroadcastReceiver {
         if (am == null) return;
         try {
             JSONArray a = new JSONArray(json);
-            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true, 60, true));
+            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true, 60, true, ""));
         } catch (Exception ignored) {}
     }
 
     /** dur (APK 2.42): segundos que suena la alarma (15, 30, 60); 0 = hasta que la apagues. */
-    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul, int dur, boolean gr) {
+    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul, int dur, boolean gr, String extra) {
         Intent i = new Intent(c, Recordatorios.class).setAction("club.practicaintegral.equilibra.RECORDATORIO." + id);
-        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul).putExtra("dur", dur).putExtra("gr", gr);
+        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul).putExtra("dur", dur).putExtra("gr", gr).putExtra("extra", extra);
         return PendingIntent.getBroadcast(c, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
@@ -186,9 +190,15 @@ public class Recordatorios extends BroadcastReceiver {
         try {
             String txt = orig.getStringExtra("txt");
             if (txt != null && !txt.startsWith("Pospuesto")) txt = "Pospuesto · " + txt;
-            programarUno(c, new JSONObject().put("id", base + "|pos").put("at", System.currentTimeMillis() + min * 60000L)
+            JSONObject r = new JSONObject().put("id", base + "|pos").put("at", System.currentTimeMillis() + min * 60000L)
                     .put("tit", orig.getStringExtra("tit")).put("txt", txt).put("ev", orig.getStringExtra("ev"))
-                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)).put("dur", orig.getIntExtra("dur", 60)).put("gr", orig.getBooleanExtra("gr", true)));
+                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)).put("dur", orig.getIntExtra("dur", 60)).put("gr", orig.getBooleanExtra("gr", true));
+            try {   // 2.49: conserva la hora de la tarea, el texto y el color
+                JSONObject x = new JSONObject(orig.getStringExtra("extra") == null ? "{}" : orig.getStringExtra("extra"));
+                java.util.Iterator<String> it = x.keys();
+                while (it.hasNext()) { String key = it.next(); r.put(key, x.get(key)); }
+            } catch (Exception ignored) {}
+            programarUno(c, r);
         } catch (Exception ignored) {}
     }
 

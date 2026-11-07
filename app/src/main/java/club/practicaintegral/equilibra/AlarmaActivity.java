@@ -63,19 +63,73 @@ public class AlarmaActivity extends Activity {
         return b;
     }
 
+    /** 2.49 (Gustavo, igual que la web): «Falta 1 hora para», «Faltan 5 minutos para», «Es la hora de»… */
+    private static String largoMin(long m) {
+        if (m < 60) return m + (m == 1 ? " minuto" : " minutos");
+        if (m < 1440) { long h = m / 60, r = m % 60; return h + (h == 1 ? " hora" : " horas") + (r > 0 ? " y " + r + " min" : ""); }
+        long d = Math.round(m / 1440.0); return d + (d == 1 ? " día" : " días");
+    }
+    static String faltaTxt(long ini, boolean todo) {
+        if (ini <= 0) return "";
+        if (todo) {
+            java.util.Calendar hoy = java.util.Calendar.getInstance();
+            hoy.set(java.util.Calendar.HOUR_OF_DAY, 0); hoy.set(java.util.Calendar.MINUTE, 0); hoy.set(java.util.Calendar.SECOND, 0); hoy.set(java.util.Calendar.MILLISECOND, 0);
+            long n = Math.round((ini - hoy.getTimeInMillis()) / 86400000.0);
+            return n <= 0 ? "Hoy toca" : n == 7 ? "Falta 1 semana para" : (n == 1 ? "Falta " : "Faltan ") + largoMin(n * 1440) + " para";
+        }
+        long m = (long) Math.ceil((ini - System.currentTimeMillis()) / 60000.0);
+        if (m <= 0 && m >= -1) return "Es la hora de";
+        if (m < -1) return "Empezó hace " + largoMin(-m);
+        String t = largoMin(m);
+        return (t.startsWith("1 ") ? "Falta " : "Faltan ") + t + " para";
+    }
+
+    /** el color de la tarea mezclado con el morado oscuro, como el degradado de la web */
+    private static int mezcla(int a, int b, float p) {
+        return Color.rgb((int) (Color.red(a) * p + Color.red(b) * (1 - p)), (int) (Color.green(a) * p + Color.green(b) * (1 - p)), (int) (Color.blue(a) * p + Color.blue(b) * (1 - p)));
+    }
+
     private void pintar(Intent in) {
         String tit = in.getStringExtra("tit"), txt = in.getStringExtra("txt"), id = in.getStringExtra("id");
         boolean ultima = in.getBooleanExtra("ul", true);
+        long ini = 0; boolean todo = false; String cuando = "", colTarea = "";
+        try {
+            org.json.JSONObject x = new org.json.JSONObject(in.getStringExtra("extra") == null ? "{}" : in.getStringExtra("extra"));
+            ini = x.optLong("ini", 0); todo = x.optBoolean("todo", false); cuando = x.optString("cuando", ""); colTarea = x.optString("col", "");
+        } catch (Exception ignored) {}
+        String falta = faltaTxt(ini, todo);
 
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL); col.setGravity(Gravity.CENTER_HORIZONTAL);
         col.setPadding(dp(24), dp(48), dp(24), dp(32));
 
-        col.addView(texto("Amable Life", 22, Color.WHITE, true));
+        // 2.49 (Gustavo): arriba el logotipo y «Amable Life», «RECORDATORIO», la campana sonando, en amarillo lo que falta,
+        // la tarea y «Tarea para realizar a las 17:30»
+        LinearLayout marca = new LinearLayout(this);
+        marca.setOrientation(LinearLayout.HORIZONTAL); marca.setGravity(Gravity.CENTER);
+        android.widget.ImageView logo = new android.widget.ImageView(this);
+        logo.setImageResource(R.mipmap.ic_launcher_foreground);
+        logo.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER); logo.setScaleX(1.45f); logo.setScaleY(1.45f);   // el girasol ocupa el centro del icono adaptable
+        LinearLayout.LayoutParams llogo = new LinearLayout.LayoutParams(dp(40), dp(40)); llogo.rightMargin = dp(8);
+        marca.addView(logo, llogo);
+        marca.addView(texto("Amable Life", 22, Color.WHITE, true));
+        col.addView(marca);
         TextView rec = texto("RECORDATORIO", 15, Color.parseColor("#f7c35b"), true);
-        rec.setLetterSpacing(0.15f); rec.setPadding(0, dp(6), 0, dp(36)); col.addView(rec);
-        TextView t = texto(tit == null ? "" : tit, 30, Color.WHITE, true); t.setPadding(0, 0, 0, dp(10)); col.addView(t);
-        TextView c = texto(txt == null ? "" : txt, 18, Color.parseColor("#e9e4ff"), false); c.setPadding(0, 0, 0, dp(36)); col.addView(c);
+        rec.setLetterSpacing(0.15f); rec.setPadding(0, dp(4), 0, dp(20)); col.addView(rec);
+
+        android.widget.ImageView campana = new android.widget.ImageView(this);
+        campana.setImageResource(R.drawable.ic_campana);
+        col.addView(campana, new LinearLayout.LayoutParams(dp(68), dp(68)));
+        campana.setPivotX(dp(34)); campana.setPivotY(dp(6));
+        android.animation.ObjectAnimator mueve = android.animation.ObjectAnimator.ofFloat(campana, "rotation", -14f, 14f);
+        mueve.setDuration(500); mueve.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        mueve.setRepeatMode(android.animation.ValueAnimator.REVERSE); mueve.start();
+
+        if (!falta.isEmpty()) {
+            TextView f = texto(falta, 21, Color.parseColor("#f7c35b"), true); f.setPadding(0, dp(14), 0, dp(4)); col.addView(f);
+        }
+        TextView t = texto(tit == null ? "" : tit, 30, Color.WHITE, true); t.setPadding(0, falta.isEmpty() ? dp(14) : 0, 0, dp(10)); col.addView(t);
+        TextView c = texto(cuando.isEmpty() ? (txt == null ? "" : txt) : cuando, 18, Color.parseColor("#e9e4ff"), false); c.setPadding(0, 0, 0, dp(32)); col.addView(c);
 
         // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
         Button ent = boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
@@ -111,8 +165,10 @@ public class AlarmaActivity extends Activity {
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
+        int arriba = Color.parseColor("#3d2466");
+        try { if (!colTarea.isEmpty()) arriba = mezcla(Color.parseColor(colTarea), Color.parseColor("#2a1f52"), 0.45f); } catch (Exception ignored) {}
         GradientDrawable fondo = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{Color.parseColor("#3d2466"), Color.parseColor("#140f26")});
+                new int[]{mezcla(arriba, Color.parseColor("#140f26"), 0.8f), arriba, Color.parseColor("#140f26"), Color.parseColor("#140f26")});
         sv.setBackground(fondo);
         LinearLayout centro = new LinearLayout(this);
         centro.setGravity(Gravity.CENTER); centro.setOrientation(LinearLayout.VERTICAL);

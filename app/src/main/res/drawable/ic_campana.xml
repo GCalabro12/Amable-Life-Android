@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Campana de la ventana de la alarma (APK 2.49), la misma que la de la web (ICO_CAMPANA) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp" android:height="64dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M6,16V11a6,6 0,0 1,12 0v5l1.5,2h-15z"
+        android:strokeColor="#f7c35b" android:strokeWidth="1.9" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+    <path android:pathData="M10,20.5a2,2 0,0 0,4 0"
+        android:strokeColor="#f7c35b" android:strokeWidth="1.9" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+</vector>
