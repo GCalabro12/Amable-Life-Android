@@ -54,7 +54,7 @@ import java.util.List;
  * La web sabe que está dentro de la app porque existe window.AndroidEquilibra.
  */
 public class MainActivity extends Activity {
-    private static final String WEB = "https://gcalabro12.github.io/Equilibra/";
+    private static final String WEB = "https://gcalabro12.github.io/Amable-Life/";   // 2.43: el repositorio pasa de Equilibra a Amable-Life
     private static final String HOST = "gcalabro12.github.io";
     private static final int REQ_DICTAR = 42;
     /** ID de cliente web del proyecto Firebase equilibra-6aff8 (proveedor Google). */
