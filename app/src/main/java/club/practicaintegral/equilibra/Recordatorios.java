@@ -102,17 +102,7 @@ public class Recordatorios extends BroadcastReceiver {
             return;
         }
         if (appVisible) return;   // con la app en pantalla suena la alarma de la web
-        android.net.Uri sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-        if (sonido == null) sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-        if (sonido == null) sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-        NotificationChannel ch = new NotificationChannel(CANAL_ALARMA, "Alarmas del calendario", NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Suenan como una alarma a la hora de tus recordatorios");
-        ch.enableVibration(true);
-        ch.setVibrationPattern(new long[]{0, 600, 300, 600, 300, 600});
-        ch.setSound(sonido, new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
-                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        nm.createNotificationChannel(ch);
+        crearCanal(c);
         PendingIntent abrir = PendingIntent.getActivity(c, 3,
                 new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -131,6 +121,54 @@ public class Recordatorios extends BroadcastReceiver {
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT;   // el sonido se repite hasta que la paras, la abres o pasa el minuto
         try { nm.notify(nid, n); } catch (SecurityException ignored) {}
+    }
+
+    /** Crea (si no está) el canal de las alarmas, con el sonido de alarma del teléfono. Después la persona puede cambiar el sonido
+     *  en los ajustes del canal (APK 2.40: botón «Elegir el sonido de la alarma» en Ajustes de la app). */
+    static void crearCanal(Context c) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null || nm.getNotificationChannel(CANAL_ALARMA) != null) return;
+        android.net.Uri sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+        if (sonido == null) sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+        if (sonido == null) sonido = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        NotificationChannel ch = new NotificationChannel(CANAL_ALARMA, "Alarmas del calendario", NotificationManager.IMPORTANCE_HIGH);
+        ch.setDescription("Suenan como una alarma a la hora de tus recordatorios");
+        ch.enableVibration(true);
+        ch.setVibrationPattern(new long[]{0, 600, 300, 600, 300, 600});
+        ch.setSound(sonido, new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        nm.createNotificationChannel(ch);
+    }
+
+    /** El sonido elegido para las alarmas (el del canal; si no hay, el de alarma del teléfono). */
+    static android.net.Uri sonidoElegido(Context c) {
+        crearCanal(c);
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationChannel ch = nm == null ? null : nm.getNotificationChannel(CANAL_ALARMA);
+        android.net.Uri u = ch == null ? null : ch.getSound();
+        return u != null ? u : RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+    }
+
+    /** Con la app en pantalla, la web pide sonar la alarma con el sonido del teléfono (como mucho un minuto). */
+    private static android.media.Ringtone tono;
+    private static final android.os.Handler manejador = new android.os.Handler(android.os.Looper.getMainLooper());
+    static synchronized void sonar(Context c, int segundos) {
+        parar();
+        try {
+            tono = RingtoneManager.getRingtone(c.getApplicationContext(), sonidoElegido(c));
+            if (tono == null) return;
+            tono.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            if (Build.VERSION.SDK_INT >= 28) tono.setLooping(true);
+            tono.play();
+            manejador.removeCallbacksAndMessages(null);
+            manejador.postDelayed(Recordatorios::parar, Math.max(3, segundos) * 1000L);
+        } catch (Exception ignored) {}
+    }
+    static synchronized void parar() {
+        try { if (tono != null) tono.stop(); } catch (Exception ignored) {}
+        tono = null;
     }
 
     private static PendingIntent boton(Context c, String accion, Intent orig) {

@@ -416,6 +416,25 @@ public class MainActivity extends Activity {
             }
         }
 
+        /** APK 2.40: abre los ajustes del canal «Alarmas del calendario» para elegir el sonido del teléfono. */
+        @JavascriptInterface public void elegirSonidoAlarma() {
+            runOnUiThread(() -> {
+                Recordatorios.crearCanal(MainActivity.this);
+                try {
+                    startActivity(new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())
+                            .putExtra(Settings.EXTRA_CHANNEL_ID, Recordatorios.CANAL_ALARMA));
+                } catch (ActivityNotFoundException e) {
+                    try { startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName())); }
+                    catch (ActivityNotFoundException ignored) {}
+                }
+            });
+        }
+
+        /** Con la app en pantalla: suena la alarma con el sonido elegido en el teléfono (segundos) y se para. */
+        @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
+        @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
+
         @JavascriptInterface public void cerrarFlotante() { runOnUiThread(() -> FlotanteService.cerrar(MainActivity.this)); }
 
         @JavascriptInterface public void abrirPC() {
