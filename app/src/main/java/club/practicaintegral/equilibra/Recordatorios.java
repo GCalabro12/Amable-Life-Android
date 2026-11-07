@@ -12,15 +12,17 @@ import android.content.SharedPreferences;
 import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.os.Build;
+import android.provider.Settings;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
  * Recordatorios del calendario de Amable Life con la app CERRADA (APK 2.38).
- * La web manda la lista de los próximos días: [{id, at (milisegundos), tit, txt}], y aquí cada uno se deja programado
- * en el reloj de Android (AlarmManager). A su hora sale una notificación con sonido y vibración; tocarla abre la app.
- * Si la app está abierta en pantalla no se notifica: la web ya lo avisa (en pantalla y con voz).
+ * La web manda la lista de los próximos días: [{id, at (milisegundos), tit, txt, ev, k, ul}], y aquí cada uno se deja programado
+ * en el reloj de Android (AlarmManager). A su hora suena como una alarma (2.39) y sale la ventana a pantalla completa (2.41,
+ * AlarmaActivity) con Enterado, Posponer y, en la última alarma de la tarea (ul), Completado.
+ * Si la app está abierta en pantalla no se notifica: la web ya lo avisa (con su propia ventana).
  * Se guardan para volver a programarlos al encender el teléfono o al actualizar la app.
  */
 public class Recordatorios extends BroadcastReceiver {
@@ -43,21 +45,26 @@ public class Recordatorios extends BroadcastReceiver {
     }
 
     private static void poner(Context c, String json) {
-        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-        if (am == null) return;
         long ahora = System.currentTimeMillis();
         try {
             JSONArray a = new JSONArray(json == null ? "[]" : json);
             for (int i = 0; i < a.length(); i++) {
                 JSONObject r = a.getJSONObject(i);
-                long at = r.optLong("at", 0);
-                if (at <= ahora) continue;
-                PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""));
-                boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
-                if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
-                else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+                if (r.optLong("at", 0) > ahora) programarUno(c, r);
             }
         } catch (Exception ignored) {}
+    }
+
+    /** Programa un recordatorio suelto (también los pospuestos, que no van en la lista guardada). */
+    static void programarUno(Context c, JSONObject r) {
+        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
+                r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true));
+        long at = r.optLong("at", 0);
+        boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
+        if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
     }
 
     private static void cancelar(Context c, String json) {
@@ -65,13 +72,13 @@ public class Recordatorios extends BroadcastReceiver {
         if (am == null) return;
         try {
             JSONArray a = new JSONArray(json);
-            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", ""));
+            for (int i = 0; i < a.length(); i++) am.cancel(intento(c, a.getJSONObject(i).optString("id"), "", "", "", "", true));
         } catch (Exception ignored) {}
     }
 
-    private static PendingIntent intento(Context c, String id, String tit, String txt) {
+    private static PendingIntent intento(Context c, String id, String tit, String txt, String ev, String k, boolean ul) {
         Intent i = new Intent(c, Recordatorios.class).setAction("club.practicaintegral.equilibra.RECORDATORIO." + id);
-        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt);
+        i.putExtra("id", id).putExtra("tit", tit).putExtra("txt", txt).putExtra("ev", ev).putExtra("k", k).putExtra("ul", ul);
         return PendingIntent.getBroadcast(c, id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 
@@ -80,31 +87,31 @@ public class Recordatorios extends BroadcastReceiver {
     static final String CANAL_ALARMA = "alarmas";
     private static final String PARAR = "club.practicaintegral.equilibra.PARAR.";
     private static final String POSPONER = "club.practicaintegral.equilibra.POSPONER.";
+    private static final String COMPLETAR = "club.practicaintegral.equilibra.COMPLETAR.";
 
     @Override
     public void onReceive(Context c, Intent intent) {
-        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm == null) return;
         String act = intent.getAction() == null ? "" : intent.getAction();
         String id = intent.getStringExtra("id");
-        int nid = id == null ? 7 : id.hashCode();
-        if (act.startsWith(PARAR)) { nm.cancel(nid); return; }
-        if (act.startsWith(POSPONER)) {   // vuelve a sonar dentro de 5 minutos
-            nm.cancel(nid);
-            AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-            if (am != null) {
-                PendingIntent pi = intento(c, id + ".pos", intent.getStringExtra("tit"), "Pospuesto · " + intent.getStringExtra("txt"));
-                long at = System.currentTimeMillis() + 5 * 60000L;
-                boolean exacta = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
-                if (exacta) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
-                else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+        if (act.startsWith(PARAR)) { quitar(c, id); return; }
+        if (act.startsWith(POSPONER)) { posponer(c, intent, intent.getIntExtra("min", 5)); return; }
+        if (act.startsWith(COMPLETAR)) { completar(c, intent); return; }
+        if (appVisible) {   // con la app en pantalla avisa la web; los pospuestos los pinta ella también
+            if (id != null && id.endsWith("|pos")) {
+                try {
+                    JSONObject o = new JSONObject().put("ev", intent.getStringExtra("ev")).put("k", intent.getStringExtra("k"))
+                            .put("txt", intent.getStringExtra("txt")).put("ul", intent.getBooleanExtra("ul", true));
+                    MainActivity.js("window.alarmaDesdeApp && alarmaDesdeApp(" + o + ")");
+                } catch (Exception ignored) {}
             }
             return;
         }
-        if (appVisible) return;   // con la app en pantalla suena la alarma de la web
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
         crearCanal(c);
-        PendingIntent abrir = PendingIntent.getActivity(c, 3,
-                new Intent(c, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        Intent ventana = new Intent(c, AlarmaActivity.class).putExtras(intent)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION);
+        PendingIntent pantalla = PendingIntent.getActivity(c, ("v" + id).hashCode(), ventana,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = new Notification.Builder(c, CANAL_ALARMA)
                 .setSmallIcon(R.drawable.ic_stat_pasos)
@@ -112,15 +119,64 @@ public class Recordatorios extends BroadcastReceiver {
                 .setContentText(intent.getStringExtra("txt"))
                 .setStyle(new Notification.BigTextStyle().bigText(intent.getStringExtra("txt")))
                 .setCategory(Notification.CATEGORY_ALARM)
-                .setContentIntent(abrir)
-                .setDeleteIntent(boton(c, PARAR, intent))
+                .setContentIntent(pantalla)
+                .setFullScreenIntent(pantalla, true)   // 2.41: con la pantalla apagada o bloqueada, la ventana grande
+                .setDeleteIntent(boton(c, PARAR, intent, 0))
                 .setAutoCancel(true)
                 .setTimeoutAfter(60000)   // suena como mucho un minuto
-                .addAction(new Notification.Action.Builder(null, "Parar", boton(c, PARAR, intent)).build())
-                .addAction(new Notification.Action.Builder(null, "Posponer 5 min", boton(c, POSPONER, intent)).build());
+                .addAction(new Notification.Action.Builder(null, "Enterado", boton(c, PARAR, intent, 0)).build())
+                .addAction(new Notification.Action.Builder(null, "Posponer 5 min", boton(c, POSPONER, intent, 5)).build());
+        if (intent.getBooleanExtra("ul", true))
+            b.addAction(new Notification.Action.Builder(null, "Completado", boton(c, COMPLETAR, intent, 0)).build());
         Notification n = b.build();
         n.flags |= Notification.FLAG_INSISTENT;   // el sonido se repite hasta que la paras, la abres o pasa el minuto
-        try { nm.notify(nid, n); } catch (SecurityException ignored) {}
+        try { nm.notify(nid(id), n); } catch (SecurityException ignored) {}
+        // Con el móvil desbloqueado Android solo enseña el aviso de arriba: si la app puede «mostrarse sobre otras apps»
+        // (el permiso de la ventana flotante), se abre directamente la ventana grande.
+        if (Settings.canDrawOverlays(c)) { try { c.startActivity(ventana); } catch (Exception ignored) {} }
+    }
+
+    static int nid(String id) { return id == null ? 7 : id.hashCode(); }
+
+    /** Enterado: se para el sonido y se quita el aviso. */
+    static void quitar(Context c, String id) {
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.cancel(nid(id));
+        parar();
+    }
+
+    /** Posponer N minutos: se quita y se vuelve a programar (sigue siendo la última si lo era). */
+    static void posponer(Context c, Intent orig, int min) {
+        String id = orig.getStringExtra("id");
+        quitar(c, id);
+        String base = id == null ? "x" : id.replaceAll("\\|pos$", "");
+        try {
+            String txt = orig.getStringExtra("txt");
+            if (txt != null && !txt.startsWith("Pospuesto")) txt = "Pospuesto · " + txt;
+            programarUno(c, new JSONObject().put("id", base + "|pos").put("at", System.currentTimeMillis() + min * 60000L)
+                    .put("tit", orig.getStringExtra("tit")).put("txt", txt).put("ev", orig.getStringExtra("ev"))
+                    .put("k", orig.getStringExtra("k")).put("ul", orig.getBooleanExtra("ul", true)));
+        } catch (Exception ignored) {}
+    }
+
+    /** Completado: se apunta para que la web lo marque como hecho al abrirse (o ahora, si está abierta por detrás). */
+    static void completar(Context c, Intent orig) {
+        quitar(c, orig.getStringExtra("id"));
+        SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        try {
+            JSONArray a = new JSONArray(p.getString("hechos", "[]"));
+            a.put(new JSONObject().put("ev", orig.getStringExtra("ev")).put("k", orig.getStringExtra("k")));
+            p.edit().putString("hechos", a.toString()).apply();
+        } catch (Exception ignored) {}
+        MainActivity.js("window.aplicarAlarmas && aplicarAlarmas()");
+    }
+
+    /** Lo completado desde la ventana, para la web (y se vacía). */
+    static String pendientes(Context c) {
+        SharedPreferences p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String s = p.getString("hechos", "[]");
+        p.edit().putString("hechos", "[]").apply();
+        return s;
     }
 
     /** Crea (si no está) el canal de las alarmas, con el sonido de alarma del teléfono. Después la persona puede cambiar el sonido
@@ -171,10 +227,10 @@ public class Recordatorios extends BroadcastReceiver {
         tono = null;
     }
 
-    private static PendingIntent boton(Context c, String accion, Intent orig) {
+    private static PendingIntent boton(Context c, String accion, Intent orig, int min) {
         String id = orig.getStringExtra("id");
         Intent i = new Intent(c, Recordatorios.class).setAction(accion + id);
-        i.putExtra("id", id).putExtra("tit", orig.getStringExtra("tit")).putExtra("txt", orig.getStringExtra("txt"));
+        i.putExtras(orig).putExtra("min", min);
         return PendingIntent.getBroadcast(c, (accion + id).hashCode(), i, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 }

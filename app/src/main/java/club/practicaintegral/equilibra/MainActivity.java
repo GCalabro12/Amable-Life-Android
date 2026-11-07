@@ -78,6 +78,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         Recordatorios.appVisible = true;
+        if (web != null) web.evaluateJavascript("window.aplicarAlarmas && aplicarAlarmas()", null);
         if (quiereFlotante && FlotanteService.puede(this)) {
             quiereFlotante = false;
             FlotanteService.abrir(this);
@@ -434,6 +435,13 @@ public class MainActivity extends Activity {
         /** Con la app en pantalla: suena la alarma con el sonido elegido en el teléfono (segundos) y se para. */
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
+
+        /** APK 2.41: posponer desde la ventana de la web; lo programa el teléfono (suena aunque cierres la app). */
+        @JavascriptInterface public void posponerAlarma(String json) {
+            try { Recordatorios.programarUno(MainActivity.this, new org.json.JSONObject(json)); } catch (Exception ignored) {}
+        }
+        /** APK 2.41: lo marcado como «Completado» en la ventana del teléfono, para que la web lo apunte (y se vacía). */
+        @JavascriptInterface public String pendientesAlarma() { return Recordatorios.pendientes(MainActivity.this); }
 
         @JavascriptInterface public void cerrarFlotante() { runOnUiThread(() -> FlotanteService.cerrar(MainActivity.this)); }
 

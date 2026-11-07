@@ -13,6 +13,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 2.41: la ventana de alarma a pantalla completa, también con el móvil bloqueado -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Recordatorios del calendario a su hora exacta, también con la app cerrada -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
@@ -59,6 +61,17 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Ventana flotante con el bloque de tiempo actual y sus tareas, encima de las demás apps" />
         </service>
+
+        <activity
+            android:name=".AlarmaActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=".alarma"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:theme="@style/Tema" />
 
         <receiver
             android:name=".Recordatorios"
