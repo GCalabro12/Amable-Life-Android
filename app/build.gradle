@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'club.practicaintegral.equilibra'
-    compileSdk 34
+    compileSdk 36
 
     defaultConfig {
         applicationId 'club.practicaintegral.equilibra'
         minSdk 26
-        targetSdk 34
+        targetSdk 36 // Google Play pide Android 16 (API 36) desde el 31-08-2026 (2.46)
         // La compilación automática de GitHub pone el número de versión
         versionCode Integer.parseInt(System.getenv('VERSION_CODE') ?: '1')
         versionName System.getenv('VERSION_NAME') ?: '1.0'
@@ -23,6 +23,16 @@ android {
             keyPassword System.getenv('KEYSTORE_PASSWORD')
             storeType 'pkcs12'
         }
+    }
+
+    buildFeatures { buildConfig true }
+
+    // 2.46: dos versiones de la misma app. «web» = la APK que se descarga de la web (se actualiza ella sola);
+    // «play» = el .aab para Google Play (sin el permiso de instalar paquetes: en Play se actualiza la tienda).
+    flavorDimensions 'tienda'
+    productFlavors {
+        web { dimension 'tienda'; buildConfigField 'boolean', 'DE_PLAY', 'false' }
+        play { dimension 'tienda'; buildConfigField 'boolean', 'DE_PLAY', 'true' }
     }
 
     buildTypes {

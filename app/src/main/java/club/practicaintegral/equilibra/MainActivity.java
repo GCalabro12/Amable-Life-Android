@@ -101,6 +101,9 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         actual = new java.lang.ref.WeakReference<>(this);
+        // Android 13+: con la API 36 el botón «atrás» llega por OnBackInvokedCallback (onBackPressed ya no se llama) (2.46)
+        if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+            android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::atras);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(0xFF140F26);
 
@@ -258,7 +261,9 @@ public class MainActivity extends Activity {
     }
 
     @Override
-    public void onBackPressed() {
+    public void onBackPressed() { atras(); }
+
+    private void atras() {
         // La web decide: cerrar una hoja o volver a Inicio. Si ya está en Inicio, la app se va al fondo.
         web.evaluateJavascript("(function(){try{return window.atrasNativo ? atrasNativo() : false}catch(e){return false}})()", v -> {
             if (!"true".equals(v)) moveTaskToBack(true);
@@ -438,6 +443,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
         /** APK 2.45 (Gustavo): qué permisos de las alarmas faltan, para la ventana «Activa estos permisos» de la web. */
+        /** 2.46: true en la versión de Google Play (la web no ofrece descargar la APK: se actualiza desde la tienda). */
+        @JavascriptInterface public boolean dePlay() { return BuildConfig.DE_PLAY; }
+
         @JavascriptInterface public String permisos() {
             boolean sobre = Settings.canDrawOverlays(MainActivity.this);
             boolean notif = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;

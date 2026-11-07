@@ -21,7 +21,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.11.1'
 
       - name: Versión (la misma numeración que la web)
         run: echo "VERSION_NAME=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_ENV"
@@ -34,10 +34,12 @@ jobs:
           KEYSTORE_FILE: ${{ runner.temp }}/clave.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: gradle assembleWebRelease bundlePlayRelease --no-daemon --stacktrace
 
-      - name: Preparar APK
-        run: cp app/build/outputs/apk/release/app-release.apk Equilibra.apk
+      - name: Preparar APK y paquete de Google Play
+        run: |
+          cp app/build/outputs/apk/web/release/app-web-release.apk Equilibra.apk
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab AmableLife.aab
 
       - name: Publicar descarga
         uses: softprops/action-gh-release@v2
@@ -46,6 +48,9 @@ jobs:
           name: Amable Life v${{ env.VERSION_NAME }}
           body: |
             Descarga **Equilibra.apk** en el móvil y ábrelo para instalar o actualizar.
+            AmableLife.aab es el paquete para subir a Google Play (sin la descarga de la APK).
             Enlace fijo a la última versión: https://github.com/${{ github.repository }}/releases/latest/download/Equilibra.apk
-          files: Equilibra.apk
+          files: |
+            Equilibra.apk
+            AmableLife.aab
           make_latest: true
