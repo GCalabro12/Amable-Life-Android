@@ -443,7 +443,9 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
         /** 2.51: la web no hace sonar la alarma con el modo avión puesto. */
-        @JavascriptInterface public boolean modoAvion() { return Recordatorios.modoAvion(MainActivity.this); }
+        @JavascriptInterface public boolean modoAvion() { return Recordatorios.modoAvion(MainActivity.this) || Recordatorios.modoLuna(MainActivity.this); }
+        /** 2.52: el modo luna (No molestar). */
+        @JavascriptInterface public boolean modoLuna() { return Recordatorios.modoLuna(MainActivity.this); }
         /** APK 2.45 (Gustavo): qué permisos de las alarmas faltan, para la ventana «Activa estos permisos» de la web. */
         /** 2.46: true en la versión de Google Play (la web no ofrece descargar la APK: se actualiza desde la tienda). */
         @JavascriptInterface public boolean dePlay() { return BuildConfig.DE_PLAY; }

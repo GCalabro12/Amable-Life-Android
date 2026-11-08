@@ -101,7 +101,7 @@ public class Recordatorios extends BroadcastReceiver {
         if (act.startsWith(PARAR)) { quitar(c, id); return; }
         if (act.startsWith(POSPONER)) { posponer(c, intent, intent.getIntExtra("min", 5)); return; }
         if (act.startsWith(COMPLETAR)) { completar(c, intent); return; }
-        if (modoAvion(c)) return;   // 2.51 (Gustavo): con el modo avión puesto, las alarmas no suenan ni salen
+        if (modoAvion(c) || modoLuna(c)) return;   // 2.51/2.52 (Gustavo): con el modo avión o el modo luna (No molestar), las alarmas no suenan ni salen
         if (appVisible) {   // con la app en pantalla avisa la web; los pospuestos los pinta ella también
             if (id != null && id.endsWith("|pos")) {
                 try {
@@ -177,6 +177,15 @@ public class Recordatorios extends BroadcastReceiver {
     static boolean modoAvion(Context c) {
         try { return Settings.Global.getInt(c.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0) != 0; }
         catch (Exception e) { return false; }
+    }
+    /** 2.52: el modo luna (No molestar) está puesto. Las alarmas normales lo atraviesan, por eso se mira aquí. */
+    static boolean modoLuna(Context c) {
+        try {
+            NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+            int f = nm == null ? NotificationManager.INTERRUPTION_FILTER_UNKNOWN : nm.getCurrentInterruptionFilter();
+            return f == NotificationManager.INTERRUPTION_FILTER_PRIORITY || f == NotificationManager.INTERRUPTION_FILTER_ALARMS
+                    || f == NotificationManager.INTERRUPTION_FILTER_NONE;
+        } catch (Exception e) { return false; }
     }
     static int nid(String id) { return id == null ? 7 : id.hashCode(); }
 
