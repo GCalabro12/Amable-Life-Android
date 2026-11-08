@@ -442,6 +442,8 @@ public class MainActivity extends Activity {
         /** Con la app en pantalla: suena la alarma con el sonido elegido en el teléfono (segundos) y se para. */
         @JavascriptInterface public void sonarAlarma(int segundos) { Recordatorios.sonar(MainActivity.this, segundos); }
         @JavascriptInterface public void pararAlarma() { Recordatorios.parar(); }
+        /** 2.51: la web no hace sonar la alarma con el modo avión puesto. */
+        @JavascriptInterface public boolean modoAvion() { return Recordatorios.modoAvion(MainActivity.this); }
         /** APK 2.45 (Gustavo): qué permisos de las alarmas faltan, para la ventana «Activa estos permisos» de la web. */
         /** 2.46: true en la versión de Google Play (la web no ofrece descargar la APK: se actualiza desde la tienda). */
         @JavascriptInterface public boolean dePlay() { return BuildConfig.DE_PLAY; }
