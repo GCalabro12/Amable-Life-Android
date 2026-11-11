@@ -132,7 +132,8 @@ public class AlarmaActivity extends Activity {
         TextView c = texto(cuando.isEmpty() ? (txt == null ? "" : txt) : cuando, 18, Color.parseColor("#e9e4ff"), false); c.setPadding(0, 0, 0, dp(32)); col.addView(c);
 
         // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
-        Button ent = boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
+        // 2.53 (Gustavo): Enterado en verde, que es lo que más se pulsa; «Tarea completada» discreto y solo en las de 5 min antes o menos (lo decide la web en «ul»)
+        Button ent = boton("Enterado", Color.parseColor("#16a34a"), 0);
         ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
         col.addView(ent);
         // 2.50 (Gustavo): en pequeño, qué quita Enterado («Solo quita este aviso de 1 hora antes»)
@@ -160,7 +161,7 @@ public class AlarmaActivity extends Activity {
         col.addView(rej, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         if (ultima) {
-            Button ok = boton("Tarea completada", Color.parseColor("#16a34a"), 0);
+            Button ok = boton("Tarea completada", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
             ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, "Tarea completada", Toast.LENGTH_SHORT).show(); finish(); });
             col.addView(ok);
         }
