@@ -270,6 +270,7 @@ public class Recordatorios extends BroadcastReceiver {
      *  puente de la web), y si el sonido elegido no se puede abrir, el de alarma, el de llamada o el de avisos del teléfono. */
     private static android.media.MediaPlayer mp;
     private static final android.os.Handler manejador = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final android.os.Handler rampa = new android.os.Handler(android.os.Looper.getMainLooper());
     static void sonar(Context c, int segundos) { sonar(c, segundos, false); }
     /** gradual (2.44): el volumen sube de casi nada al máximo en 5 segundos. */
     static void sonar(Context c, int segundos, boolean gradual) {
@@ -289,7 +290,7 @@ public class Recordatorios extends BroadcastReceiver {
                 m.setDataSource(c, u);
                 m.setLooping(true);
                 m.prepare();
-                float v0 = gradual ? 0.05f : 1f;
+                float v0 = gradual ? 0.3f : 1f;   // 2.54 (Gustavo: «empezaba a oírse como un minuto después»): ya se oye desde el principio
                 m.setVolume(v0, v0);
                 m.start();
                 mp = m;
@@ -302,8 +303,8 @@ public class Recordatorios extends BroadcastReceiver {
         if (gradual) {
             final android.media.MediaPlayer t = mp;
             for (int i = 1; i <= 20; i++) {
-                final float v = 0.05f + 0.95f * i / 20f;
-                manejador.postDelayed(() -> { try { if (t == mp) t.setVolume(v, v); } catch (Exception ignored) {} }, i * 250L);
+                final float v = 0.3f + 0.7f * i / 20f;
+                rampa.postDelayed(() -> { try { if (t == mp) t.setVolume(v, v); } catch (Exception ignored) {} }, i * 250L);
             }
         }
         manejador.postDelayed(Recordatorios::parar, Math.max(3, segundos) * 1000L);
@@ -331,10 +332,10 @@ public class Recordatorios extends BroadcastReceiver {
             if (ahora >= meta) return;
             if (volAntes < 0) volAntes = ahora;
             audio = am;
-            int pasos = gradual ? Math.max(1, meta - ahora) : 1;
+            int pasos = 1;   // 2.54: de golpe; lo gradual lo hace el sonido (antes las dos subidas juntas lo dejaban casi mudo)
             for (int i = 1; i <= pasos; i++) {
                 final int v = ahora + (meta - ahora) * i / pasos;
-                long cuando = gradual ? 5000L * i / pasos : 0;
+                long cuando = 0;
                 manejador.postDelayed(() -> {
                     try { if (mp != null) am.setStreamVolume(android.media.AudioManager.STREAM_ALARM, v, 0); } catch (Exception ignored) {}
                 }, cuando);

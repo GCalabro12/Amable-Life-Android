@@ -133,7 +133,8 @@ public class AlarmaActivity extends Activity {
 
         // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
         // 2.53 (Gustavo): Enterado en verde, que es lo que más se pulsa; «Tarea completada» discreto y solo en las de 5 min antes o menos (lo decide la web en «ul»)
-        Button ent = boton("Enterado", Color.parseColor("#16a34a"), 0);
+        // 2.54 (Gustavo): con 5 min o menos (sale «Tarea completada») el verde va en «Tarea completada»; si no, en «Enterado»
+        Button ent = ultima ? boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255)) : boton("Enterado", Color.parseColor("#16a34a"), 0);
         ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
         col.addView(ent);
         // 2.50 (Gustavo): en pequeño, qué quita Enterado («Solo quita este aviso de 1 hora antes»)
@@ -161,7 +162,7 @@ public class AlarmaActivity extends Activity {
         col.addView(rej, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         if (ultima) {
-            Button ok = boton("Tarea completada", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255));
+            Button ok = boton("Tarea completada", Color.parseColor("#16a34a"), 0);
             ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, "Tarea completada", Toast.LENGTH_SHORT).show(); finish(); });
             col.addView(ok);
         }
