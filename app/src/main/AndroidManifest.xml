@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 2.55: el asistente escucha dentro de la app, sin el cuadro de Google -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -26,6 +28,7 @@
     <!-- Para saber si PC & Body-mind está instalada (ella tiene preferencia para contar pasos) -->
     <queries>
         <package android:name="club.practicaintegral.pasos" />
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
     </queries>
 
     <application

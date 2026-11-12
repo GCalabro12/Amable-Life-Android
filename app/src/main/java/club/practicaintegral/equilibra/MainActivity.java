@@ -22,6 +22,10 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.os.CancellationSignal;
 import android.speech.RecognizerIntent;
+import android.speech.RecognitionListener;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import java.util.Locale;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
 import androidx.credentials.CustomCredential;
@@ -57,6 +61,14 @@ public class MainActivity extends Activity {
     private static final String WEB = "https://gcalabro12.github.io/Amable-Life/";   // 2.43: el repositorio pasa de Equilibra a Amable-Life
     private static final String HOST = "gcalabro12.github.io";
     private static final int REQ_DICTAR = 42;
+    private static final int REQ_MIC = 4;
+    /** 2.55: asistente de la web: escucha sin el cuadro de Google y habla con su propia voz */
+    private SpeechRecognizer escucha;
+    private boolean escuchaFin;
+    private long ultimoNivel;
+    private TextToSpeech vozAsis;
+    private boolean vozAsisLista;
+    private String vozPendiente;
     /** ID de cliente web del proyecto Firebase equilibra-6aff8 (proveedor Google). */
     private static final String CLIENTE_WEB = "682128349771-a175emei7guudhv3gt08ra5vb3bcuuus.apps.googleusercontent.com";
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -244,6 +256,11 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        if (code == REQ_MIC) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) empezarEscucha();
+            else enviarEscucha("error", "Permite el micrófono para preguntarme.");
+            return;
+        }
         if (code == 2) return;   // permiso de notificaciones para los recordatorios del calendario
         StepService.start(this);
         web.evaluateJavascript("window.nativeRefresh && window.nativeRefresh()", null);
@@ -316,6 +333,98 @@ public class MainActivity extends Activity {
                 + (error == null ? "null" : JSONObject.quote(error)) + ")", null);
     }
 
+    /* ---------- 2.55: el asistente escucha dentro de la app (SpeechRecognizer, sin ventana de Google) ---------- */
+    private void enviarEscucha(String tipo, String texto) {
+        if (web == null) return;
+        web.evaluateJavascript("window.nativeEscucha && window.nativeEscucha(" + JSONObject.quote(tipo) + ","
+                + (texto == null ? "null" : JSONObject.quote(texto)) + ")", null);
+    }
+
+    private void pararEscucha() {
+        if (escucha != null) { try { escucha.cancel(); escucha.destroy(); } catch (RuntimeException ignored) {} escucha = null; }
+    }
+
+    private void empezarEscucha() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            return;
+        }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) { enviarEscucha("nohay", null); return; }
+        pararEscucha();
+        if (vozAsis != null) vozAsis.stop();
+        escuchaFin = false;
+        try {
+            escucha = SpeechRecognizer.createSpeechRecognizer(this);
+        } catch (RuntimeException e) { enviarEscucha("nohay", null); return; }
+        escucha.setRecognitionListener(new RecognitionListener() {
+            @Override public void onReadyForSpeech(Bundle b) { enviarEscucha("listo", null); }
+            @Override public void onBeginningOfSpeech() {}
+            @Override public void onRmsChanged(float rms) {
+                long t = System.currentTimeMillis();
+                if (t - ultimoNivel < 90) return;
+                ultimoNivel = t; enviarEscucha("nivel", String.valueOf(rms));
+            }
+            @Override public void onBufferReceived(byte[] b) {}
+            @Override public void onEndOfSpeech() { enviarEscucha("pensando", null); }
+            @Override public void onError(int error) {
+                if (escuchaFin) return;   // algunos teléfonos mandan un error justo después del resultado
+                escuchaFin = true;
+                String m;
+                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) m = "No te he oído. Toca el micrófono y pregunta otra vez.";
+                else if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) m = "Permite el micrófono para preguntarme.";
+                else if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT) m = "Sin conexión no te puedo escuchar. Toca «Hoy» o «Mañana».";
+                else m = "No he podido escucharte. Toca el micrófono otra vez.";
+                pararEscucha();
+                enviarEscucha("error", m);
+            }
+            @Override public void onResults(Bundle r) {
+                if (escuchaFin) return;
+                escuchaFin = true;
+                ArrayList<String> l = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                String t = l != null && !l.isEmpty() ? l.get(0) : "";
+                pararEscucha();
+                if (t.trim().isEmpty()) enviarEscucha("error", "No te he oído. Toca el micrófono y pregunta otra vez.");
+                else enviarEscucha("final", t);
+            }
+            @Override public void onPartialResults(Bundle r) {
+                ArrayList<String> l = r.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (l != null && !l.isEmpty() && !l.get(0).isEmpty()) enviarEscucha("parcial", l.get(0));
+            }
+            @Override public void onEvent(int t, Bundle b) {}
+        });
+        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES");
+        i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+        i.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
+        try { escucha.startListening(i); }
+        catch (RuntimeException e) { pararEscucha(); enviarEscucha("error", "No he podido escucharte. Toca el micrófono otra vez."); }
+    }
+
+    /** Voz propia del asistente (no depende del permiso de pasos ni del servicio) */
+    private void hablarAsis(String texto) {
+        if (vozAsis == null) {
+            vozPendiente = texto;
+            vozAsis = new TextToSpeech(this, st -> {
+                vozAsisLista = st == TextToSpeech.SUCCESS;
+                if (vozAsisLista) {
+                    vozAsis.setLanguage(new Locale("es", "ES"));
+                    if (vozPendiente != null) { vozAsis.speak(vozPendiente, TextToSpeech.QUEUE_FLUSH, null, "asis"); vozPendiente = null; }
+                }
+            });
+            return;
+        }
+        if (!vozAsisLista) { vozPendiente = texto; return; }
+        vozAsis.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "asis");
+    }
+
+    @Override
+    protected void onDestroy() {
+        pararEscucha();
+        if (vozAsis != null) { try { vozAsis.shutdown(); } catch (RuntimeException ignored) {} vozAsis = null; }
+        super.onDestroy();
+    }
+
     private void enviarDictado(String texto, String error) {
         web.evaluateJavascript("window.nativeDictation && window.nativeDictation("
                 + (texto == null ? "null" : JSONObject.quote(texto)) + ","
@@ -338,6 +447,12 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        /** 2.55: el asistente escucha sin la ventana de Google; responde con window.nativeEscucha(tipo, texto) */
+        @JavascriptInterface public void escuchar() { runOnUiThread(MainActivity.this::empezarEscucha); }
+        @JavascriptInterface public void dejarDeEscuchar() { runOnUiThread(() -> { escuchaFin = true; pararEscucha(); }); }
+        @JavascriptInterface public void hablarAsistente(String texto) { runOnUiThread(() -> hablarAsis(texto)); }
+        @JavascriptInterface public void callarAsistente() { runOnUiThread(() -> { vozPendiente = null; if (vozAsis != null) vozAsis.stop(); }); }
 
         /** Entrar con Google (cuentas del teléfono). Responde con window.nativeGoogle(idToken, error). */
         @JavascriptInterface public void googleLogin() { runOnUiThread(MainActivity.this::entrarConGoogle); }
