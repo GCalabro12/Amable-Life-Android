@@ -25,6 +25,9 @@ import android.speech.RecognizerIntent;
 import android.speech.RecognitionListener;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
+import org.json.JSONArray;
 import java.util.Locale;
 import androidx.credentials.CredentialManager;
 import androidx.credentials.CredentialManagerCallback;
@@ -409,6 +412,14 @@ public class MainActivity extends Activity {
                 vozAsisLista = st == TextToSpeech.SUCCESS;
                 if (vozAsisLista) {
                     vozAsis.setLanguage(new Locale("es", "ES"));
+                    ponerVozAsis();
+                    // 2.56: la web sabe cuándo Gaia empieza y acaba de hablar (para mover su cara solo entonces)
+                    vozAsis.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override public void onStart(String id) { avisarHabla("empieza"); }
+                        @Override public void onDone(String id) { avisarHabla("fin"); }
+                        @Override public void onError(String id) { avisarHabla("fin"); }
+                        @Override public void onStop(String id, boolean interrupted) { avisarHabla("fin"); }
+                    });
                     if (vozPendiente != null) { vozAsis.speak(vozPendiente, TextToSpeech.QUEUE_FLUSH, null, "asis"); vozPendiente = null; }
                 }
             });
@@ -416,6 +427,40 @@ public class MainActivity extends Activity {
         }
         if (!vozAsisLista) { vozPendiente = texto; return; }
         vozAsis.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "asis");
+    }
+
+    private void avisarHabla(String tipo) {
+        handler.post(() -> { if (web != null) web.evaluateJavascript("window.nativeHabla && window.nativeHabla(" + JSONObject.quote(tipo) + ")", null); });
+    }
+
+    /** 2.56 (Gustavo: «sale una voz de hombre»): la voz elegida en la app o, si no, una voz de mujer en español */
+    private void ponerVozAsis() {
+        if (vozAsis == null) return;
+        try {
+            String elegida = getSharedPreferences("asistente", MODE_PRIVATE).getString("voz", "");
+            Voice mejor = null; int pm = Integer.MIN_VALUE;
+            for (Voice v : vozAsis.getVoices()) {
+                Locale l = v.getLocale();
+                if (l == null || !"es".equals(l.getLanguage())) continue;
+                if (v.getFeatures() != null && v.getFeatures().contains("notInstalled")) continue;
+                if (!elegida.isEmpty()) { if (v.getName().equals(elegida)) { mejor = v; break; } continue; }
+                int p = puntosMujer(v);
+                if (p > pm) { pm = p; mejor = v; }
+            }
+            if (mejor == null && !elegida.isEmpty()) { getSharedPreferences("asistente", MODE_PRIVATE).edit().remove("voz").apply(); ponerVozAsis(); return; }
+            if (mejor != null) vozAsis.setVoice(mejor);
+        } catch (RuntimeException ignored) {}
+    }
+
+    private static int puntosMujer(Voice v) {
+        String n = v.getName().toLowerCase(Locale.ROOT);
+        Locale l = v.getLocale();
+        int p = 0;
+        if (l != null && "ES".equals(l.getCountry())) p += 4;
+        if (n.contains("female") || n.contains("mujer") || n.contains("smtf") || n.contains("-x-eea") || n.contains("-x-eec") || n.contains("-x-esc")) p += 20;
+        if ((n.contains("male") && !n.contains("female")) || n.contains("smtm") || n.contains("-x-eed") || n.contains("-x-eef") || n.contains("-x-esd")) p -= 20;
+        if (!v.isNetworkConnectionRequired()) p += 2;
+        return p;
     }
 
     @Override
@@ -452,7 +497,37 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void escuchar() { runOnUiThread(MainActivity.this::empezarEscucha); }
         @JavascriptInterface public void dejarDeEscuchar() { runOnUiThread(() -> { escuchaFin = true; pararEscucha(); }); }
         @JavascriptInterface public void hablarAsistente(String texto) { runOnUiThread(() -> hablarAsis(texto)); }
-        @JavascriptInterface public void callarAsistente() { runOnUiThread(() -> { vozPendiente = null; if (vozAsis != null) vozAsis.stop(); }); }
+        @JavascriptInterface public void callarAsistente() { runOnUiThread(() -> { vozPendiente = null; if (vozAsis != null) vozAsis.stop(); avisarHabla("fin"); }); }
+        /** 2.56: voces en español del teléfono, para elegir la de Gaia: [{n, l, red, mujer, sel}] */
+        @JavascriptInterface public String vocesAsistente() {
+            JSONArray a = new JSONArray();
+            try {
+                if (vozAsis == null || !vozAsisLista) return a.toString();
+                String elegida = getSharedPreferences("asistente", MODE_PRIVATE).getString("voz", "");
+                Voice actual = vozAsis.getVoice();
+                for (Voice v : vozAsis.getVoices()) {
+                    Locale l = v.getLocale();
+                    if (l == null || !"es".equals(l.getLanguage())) continue;
+                    if (v.getFeatures() != null && v.getFeatures().contains("notInstalled")) continue;
+                    JSONObject o = new JSONObject();
+                    o.put("n", v.getName()); o.put("l", l.toLanguageTag()); o.put("red", v.isNetworkConnectionRequired());
+                    o.put("mujer", puntosMujer(v) >= 10); o.put("hombre", puntosMujer(v) <= -10);
+                    o.put("sel", elegida.isEmpty() ? (actual != null && actual.getName().equals(v.getName())) : v.getName().equals(elegida));
+                    a.put(o);
+                }
+            } catch (Exception ignored) {}
+            return a.toString();
+        }
+        /** Elige la voz de Gaia (vacío = la automática) y la prueba */
+        @JavascriptInterface public void elegirVozAsistente(String nombre, String prueba) {
+            runOnUiThread(() -> {
+                getSharedPreferences("asistente", MODE_PRIVATE).edit().putString("voz", nombre == null ? "" : nombre).apply();
+                ponerVozAsis();
+                if (prueba != null && !prueba.isEmpty()) hablarAsis(prueba);
+            });
+        }
+        /** Prepara la voz sin hablar (para que la lista de voces esté lista) */
+        @JavascriptInterface public void prepararVozAsistente() { runOnUiThread(() -> { if (vozAsis == null) { hablarAsis(""); vozPendiente = null; } }); }
 
         /** Entrar con Google (cuentas del teléfono). Responde con window.nativeGoogle(idToken, error). */
         @JavascriptInterface public void googleLogin() { runOnUiThread(MainActivity.this::entrarConGoogle); }
