@@ -29,6 +29,8 @@
     <queries>
         <package android:name="club.practicaintegral.pasos" />
         <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <!-- 2.57: sin esto, desde Android 11 la app no ve el motor de voz del teléfono (Gaia y los avisos no hablaban desde la 2.46, API 36) -->
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
     </queries>
 
     <application
