@@ -62,7 +62,8 @@ public class Recordatorios extends BroadcastReceiver {
         // 2.49: lo que necesita la ventana para escribir «Falta 1 hora para» y «Tarea para realizar a las 17:30» (como la web)
         String extra = "";
         try { extra = new JSONObject().put("ini", r.optLong("ini", 0)).put("todo", r.optBoolean("todo", false))
-                .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).put("ent", r.optString("ent", "")).toString(); } catch (Exception ignored) {}
+                .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).put("ent", r.optString("ent", ""))
+                .put("img", r.optString("img", "")).put("okt", r.optString("okt", "Tarea completada")).toString();   // 2.60 } catch (Exception ignored) {}
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
                 r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true), extra);
         long at = r.optLong("at", 0);
@@ -133,6 +134,11 @@ public class Recordatorios extends BroadcastReceiver {
         if (Settings.canDrawOverlays(c)) { try { c.startActivity(ventana); } catch (Exception ignored) {} }
     }
 
+    /** 2.60: «Práctica terminada» en las prácticas integrales; «Tarea completada» en lo demás (lo manda la web en extra.okt) */
+    static String textoOk(Intent intent) {
+        try { return new org.json.JSONObject(intent.getStringExtra("extra") == null ? "{}" : intent.getStringExtra("extra")).optString("okt", "Tarea completada"); }
+        catch (Exception e) { return "Tarea completada"; }
+    }
     /** El aviso de la alarma: ventana grande, Enterado, Posponer 5 min y, en la última, Completado. */
     static Notification construir(Context c, Intent intent, String canal) {
         String id = intent.getStringExtra("id");
@@ -153,7 +159,7 @@ public class Recordatorios extends BroadcastReceiver {
                 .addAction(new Notification.Action.Builder(null, "Enterado", boton(c, PARAR, intent, 0)).build())
                 .addAction(new Notification.Action.Builder(null, "Posponer 5 min", boton(c, POSPONER, intent, 5)).build());
         if (intent.getBooleanExtra("ul", true))
-            b.addAction(new Notification.Action.Builder(null, "Tarea completada", boton(c, COMPLETAR, intent, 0)).build());
+            b.addAction(new Notification.Action.Builder(null, textoOk(intent), boton(c, COMPLETAR, intent, 0)).build());
         int dur = intent.getIntExtra("dur", 60);
         if (dur > 0) b.setTimeoutAfter(dur * 1000L);   // lo que elegiste en «Duración»; 0 = hasta que la apagues
         return b.build();

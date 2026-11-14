@@ -92,10 +92,11 @@ public class AlarmaActivity extends Activity {
     private void pintar(Intent in) {
         String tit = in.getStringExtra("tit"), txt = in.getStringExtra("txt"), id = in.getStringExtra("id");
         boolean ultima = in.getBooleanExtra("ul", true);
-        long ini = 0; boolean todo = false; String cuando = "", colTarea = "", entTxt = "";
+        long ini = 0; boolean todo = false; String cuando = "", colTarea = "", entTxt = "", img = "", okt = "Tarea completada";
         try {
             org.json.JSONObject x = new org.json.JSONObject(in.getStringExtra("extra") == null ? "{}" : in.getStringExtra("extra"));
             ini = x.optLong("ini", 0); todo = x.optBoolean("todo", false); cuando = x.optString("cuando", ""); colTarea = x.optString("col", ""); entTxt = x.optString("ent", "");
+            img = x.optString("img", ""); okt = x.optString("okt", "Tarea completada");   // 2.60: prácticas (imagen, «Práctica terminada», fondo verde) y tareas (fondo rojo)
         } catch (Exception ignored) {}
         String falta = faltaTxt(ini, todo);
 
@@ -119,8 +120,18 @@ public class AlarmaActivity extends Activity {
 
         android.widget.ImageView campana = new android.widget.ImageView(this);
         campana.setImageResource(R.drawable.ic_campana);
-        col.addView(campana, new LinearLayout.LayoutParams(dp(68), dp(68)));
-        campana.setPivotX(dp(34)); campana.setPivotY(dp(6));
+        boolean practica = !img.isEmpty();
+        col.addView(campana, new LinearLayout.LayoutParams(dp(practica ? 40 : 68), dp(practica ? 40 : 68)));
+        if (practica) {   // 2.60 (Gustavo): la imagen de la práctica, redonda y con borde blanco, debajo de la campana
+            android.widget.ImageView foto = new android.widget.ImageView(this);
+            foto.setImageResource("meta".equals(img) ? R.drawable.meta_planta : R.mipmap.ic_launcher_foreground);
+            foto.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+            GradientDrawable redondo = new GradientDrawable(); redondo.setShape(GradientDrawable.OVAL); redondo.setColor(Color.WHITE); redondo.setStroke(dp(4), Color.WHITE);
+            foto.setBackground(redondo); foto.setClipToOutline(true); foto.setPadding(dp(4), dp(4), dp(4), dp(4));
+            LinearLayout.LayoutParams lf = new LinearLayout.LayoutParams(dp(132), dp(132)); lf.topMargin = dp(6);
+            col.addView(foto, lf);
+        }
+        campana.setPivotX(dp(practica ? 20 : 34)); campana.setPivotY(dp(4));
         android.animation.ObjectAnimator mueve = android.animation.ObjectAnimator.ofFloat(campana, "rotation", -14f, 14f);
         mueve.setDuration(500); mueve.setRepeatCount(android.animation.ValueAnimator.INFINITE);
         mueve.setRepeatMode(android.animation.ValueAnimator.REVERSE); mueve.start();
@@ -134,7 +145,8 @@ public class AlarmaActivity extends Activity {
         // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
         // 2.53 (Gustavo): Enterado en verde, que es lo que más se pulsa; «Tarea completada» discreto y solo en las de 5 min antes o menos (lo decide la web en «ul»)
         // 2.54 (Gustavo): con 5 min o menos (sale «Tarea completada») el verde va en «Tarea completada»; si no, en «Enterado»
-        Button ent = ultima ? boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255)) : boton("Enterado", Color.parseColor("#16a34a"), 0);
+        Button ent = ultima ? boton("Enterado", Color.argb(26, 255, 255, 255), Color.argb(90, 255, 255, 255)) : boton("Enterado", Color.parseColor(practica ? "#ffffff" : "#16a34a"), 0);
+        if (practica && !ultima) ent.setTextColor(Color.parseColor("#15803d"));   // 2.60: sobre el verde, el botón verde pasa a blanco
         ent.setOnClickListener(v -> { Recordatorios.quitar(this, id); finish(); });
         col.addView(ent);
         // 2.50 (Gustavo): en pequeño, qué quita Enterado («Solo quita este aviso de 1 hora antes»)
@@ -162,15 +174,18 @@ public class AlarmaActivity extends Activity {
         col.addView(rej, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         if (ultima) {
-            Button ok = boton("Tarea completada", Color.parseColor("#16a34a"), 0);
-            ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, "Tarea completada", Toast.LENGTH_SHORT).show(); finish(); });
+            Button ok = boton(okt, Color.parseColor(practica ? "#ffffff" : "#16a34a"), 0);
+            if (practica) ok.setTextColor(Color.parseColor("#15803d"));
+            final String okFin = okt;
+            ok.setOnClickListener(v -> { Recordatorios.completar(this, getIntent()); Toast.makeText(this, okFin, Toast.LENGTH_SHORT).show(); finish(); });
             col.addView(ok);
         }
 
         ScrollView sv = new ScrollView(this);
         sv.setFillViewport(true);
         int arriba = Color.parseColor("#3d2466");
-        try { if (!colTarea.isEmpty()) arriba = mezcla(Color.parseColor(colTarea), Color.parseColor("#2a1f52"), 0.45f); } catch (Exception ignored) {}
+        // 2.60: el color llega verde (práctica) o rojo (tarea) y se ve más fuerte
+        try { if (!colTarea.isEmpty()) arriba = mezcla(Color.parseColor(colTarea), Color.parseColor("#140f26"), 0.78f); } catch (Exception ignored) {}
         GradientDrawable fondo = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 new int[]{mezcla(arriba, Color.parseColor("#140f26"), 0.8f), arriba, Color.parseColor("#140f26"), Color.parseColor("#140f26")});
         sv.setBackground(fondo);
