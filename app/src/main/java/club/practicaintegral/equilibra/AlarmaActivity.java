@@ -158,11 +158,17 @@ public class AlarmaActivity extends Activity {
         mueve.setDuration(500); mueve.setRepeatCount(android.animation.ValueAnimator.INFINITE);
         mueve.setRepeatMode(android.animation.ValueAnimator.REVERSE); mueve.start();
 
+        // 2.62 (Gustavo): «Son las 10:32. Para realizar a las 10:00» en un renglón, debajo de la imagen; fuera la línea de debajo del nombre
+        java.util.Calendar ca = java.util.Calendar.getInstance();
+        int hh = ca.get(java.util.Calendar.HOUR_OF_DAY), mi = ca.get(java.util.Calendar.MINUTE);
+        String son = (hh % 12 == 1 ? "Es la " : "Son las ") + hh + ":" + (mi < 10 ? "0" : "") + mi;
+        String para = cuando.replaceFirst("^(Tarea|Práctica integral|Hábito)\\s+", "");
+        if (!para.isEmpty()) para = Character.toUpperCase(para.charAt(0)) + para.substring(1);
+        TextView sl = texto(son + (para.isEmpty() ? "" : ". " + para), 18, Color.parseColor("#e9e4ff"), false); sl.setPadding(0, dp(14), 0, 0); col.addView(sl);
         if (!falta.isEmpty()) {
-            TextView f = texto(falta, 21, Color.parseColor("#f7c35b"), true); f.setPadding(0, dp(14), 0, dp(4)); col.addView(f);
+            TextView f = texto(falta, 21, Color.parseColor("#f7c35b"), true); f.setPadding(0, dp(6), 0, dp(4)); col.addView(f);
         }
-        TextView t = texto(tit == null ? "" : tit, 30, Color.WHITE, true); t.setPadding(0, falta.isEmpty() ? dp(14) : 0, 0, dp(10)); col.addView(t);
-        TextView c = texto(cuando.isEmpty() ? (txt == null ? "" : txt) : cuando, 18, Color.parseColor("#e9e4ff"), false); c.setPadding(0, 0, 0, dp(32)); col.addView(c);
+        TextView t = texto(tit == null ? "" : tit, 30, Color.WHITE, true); t.setPadding(0, falta.isEmpty() ? dp(8) : 0, 0, dp(30)); col.addView(t);
 
         // 2.48 (Gustavo): Enterado arriba, Posponer en medio y «Tarea completada» abajo
         // 2.53 (Gustavo): Enterado en verde, que es lo que más se pulsa; «Tarea completada» discreto y solo en las de 5 min antes o menos (lo decide la web en «ul»)
