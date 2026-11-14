@@ -63,7 +63,10 @@ public class Recordatorios extends BroadcastReceiver {
         String extra = "";
         try { extra = new JSONObject().put("ini", r.optLong("ini", 0)).put("todo", r.optBoolean("todo", false))
                 .put("cuando", r.optString("cuando", "")).put("col", r.optString("col", "")).put("ent", r.optString("ent", ""))
-                .put("img", r.optString("img", "")).put("okt", r.optString("okt", "Tarea completada")).toString(); } catch (Exception ignored) {}   // 2.60: img y okt
+                .put("img", r.optString("img", "")).put("okt", r.optString("okt", "Tarea completada"))
+                .put("cols", r.optJSONArray("cols") == null ? new JSONArray() : r.optJSONArray("cols"))
+                .put("sel", r.optJSONArray("sel") == null ? new JSONArray() : r.optJSONArray("sel"))
+                .put("t1", r.optString("t1", "")).put("t2", r.optString("t2", "")).toString(); } catch (Exception ignored) {}   // 2.60: img y okt; 2.61: la flor
         PendingIntent pi = intento(c, r.optString("id"), r.optString("tit", "Amable Life"), r.optString("txt", ""),
                 r.optString("ev", ""), r.optString("k", ""), r.optBoolean("ul", true), r.optInt("dur", 60), r.optBoolean("gr", true), extra);
         long at = r.optLong("at", 0);

@@ -92,11 +92,16 @@ public class AlarmaActivity extends Activity {
     private void pintar(Intent in) {
         String tit = in.getStringExtra("tit"), txt = in.getStringExtra("txt"), id = in.getStringExtra("id");
         boolean ultima = in.getBooleanExtra("ul", true);
-        long ini = 0; boolean todo = false; String cuando = "", colTarea = "", entTxt = "", img = "", okt = "Tarea completada";
+        long ini = 0; boolean todo = false; String cuando = "", colTarea = "", entTxt = "", img = "", okt = "Tarea completada", t1 = "", t2 = "";
+        int[] cols = null; boolean[] sel = new boolean[8];
         try {
             org.json.JSONObject x = new org.json.JSONObject(in.getStringExtra("extra") == null ? "{}" : in.getStringExtra("extra"));
             ini = x.optLong("ini", 0); todo = x.optBoolean("todo", false); cuando = x.optString("cuando", ""); colTarea = x.optString("col", ""); entTxt = x.optString("ent", "");
             img = x.optString("img", ""); okt = x.optString("okt", "Tarea completada");   // 2.60: prácticas (imagen, «Práctica terminada», fondo verde) y tareas (fondo rojo)
+            t1 = x.optString("t1", ""); t2 = x.optString("t2", "");   // 2.61: «Práctica del área» y el área
+            org.json.JSONArray cs = x.optJSONArray("cols"), ss = x.optJSONArray("sel");
+            if (cs != null && cs.length() == 8) { cols = new int[8]; for (int i = 0; i < 8; i++) cols[i] = Color.parseColor(cs.getString(i)); }
+            if (ss != null) for (int i = 0; i < ss.length(); i++) { int n = ss.optInt(i, -1); if (n >= 0 && n < 8) sel[n] = true; }
         } catch (Exception ignored) {}
         String falta = faltaTxt(ini, todo);
 
@@ -122,7 +127,24 @@ public class AlarmaActivity extends Activity {
         campana.setImageResource(R.drawable.ic_campana);
         boolean practica = !img.isEmpty();
         col.addView(campana, new LinearLayout.LayoutParams(dp(practica ? 40 : 68), dp(practica ? 40 : 68)));
-        if (practica) {   // 2.60 (Gustavo): la imagen de la práctica, redonda y con borde blanco, debajo de la campana
+        if (practica && "flor".equals(img) && cols != null) {   // 2.61 (Gustavo): flor a la izquierda con el pétalo del área y, a la derecha, el círculo con el área
+            LinearLayout fila = new LinearLayout(this);
+            fila.setOrientation(LinearLayout.HORIZONTAL); fila.setGravity(Gravity.CENTER);
+            fila.addView(new FlorView(this, cols, sel), new LinearLayout.LayoutParams(dp(140), dp(140)));
+            TextView circ = new TextView(this);
+            android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+            sb.append(t1.isEmpty() ? "Práctica" : t1);
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.62f), 0, sb.length(), 0);
+            int ini2 = sb.length(); sb.append("\n").append(t2.isEmpty() ? "integral" : t2);
+            sb.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), ini2, sb.length(), 0);
+            circ.setText(sb); circ.setTextSize(20); circ.setTextColor(Color.parseColor("#15803d")); circ.setGravity(Gravity.CENTER);
+            circ.setPadding(dp(10), dp(10), dp(10), dp(10));
+            GradientDrawable ov = new GradientDrawable(); ov.setShape(GradientDrawable.OVAL); ov.setColor(Color.WHITE); circ.setBackground(ov);
+            LinearLayout.LayoutParams lc = new LinearLayout.LayoutParams(dp(128), dp(128)); lc.leftMargin = dp(14);
+            fila.addView(circ, lc);
+            LinearLayout.LayoutParams lfi = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT); lfi.topMargin = dp(6);
+            col.addView(fila, lfi);
+        } else if (practica) {   // 2.60 (Gustavo): la imagen de la práctica, redonda y con borde blanco, debajo de la campana
             android.widget.ImageView foto = new android.widget.ImageView(this);
             foto.setImageResource("meta".equals(img) ? R.drawable.meta_planta : R.mipmap.ic_launcher_foreground);
             foto.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
@@ -194,5 +216,45 @@ public class AlarmaActivity extends Activity {
         centro.addView(col, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         sv.addView(centro, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.MATCH_PARENT));
         setContentView(sv);
+    }
+
+    /** 2.61: la flor de Amable Life (como el logotipo de la web): el pétalo del área de la práctica con su color y un reborde
+     *  blanco punteado; los demás, apagados; en el centro dorado, 3 filas de 4 cuadraditos de calendario. */
+    static class FlorView extends View {
+        private final int[] cols; private final boolean[] sel;
+        FlorView(android.content.Context c, int[] cols, boolean[] sel) { super(c); this.cols = cols; this.sel = sel; setLayerType(LAYER_TYPE_SOFTWARE, null); }
+        private static android.graphics.Path petalo() {
+            float L = 60, w = 26; android.graphics.Path p = new android.graphics.Path();
+            p.moveTo(0, 0); p.cubicTo(w, -L * .28f, w * .92f, -L * .78f, 0, -L); p.cubicTo(-w * .92f, -L * .78f, -w, -L * .28f, 0, 0); p.close();
+            return p;
+        }
+        @Override protected void onDraw(android.graphics.Canvas cv) {
+            float s = Math.min(getWidth(), getHeight()) / 212f;
+            cv.save(); cv.translate(getWidth() / 2f, getHeight() / 2f); cv.scale(s, s);
+            android.graphics.Path pet = petalo();
+            boolean alguno = false; for (boolean b : sel) alguno |= b;
+            android.graphics.Paint relleno = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            android.graphics.Paint borde = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            borde.setStyle(android.graphics.Paint.Style.STROKE); borde.setStrokeWidth(4.5f); borde.setColor(Color.WHITE);
+            borde.setStrokeCap(android.graphics.Paint.Cap.ROUND); borde.setPathEffect(new android.graphics.DashPathEffect(new float[]{7, 6}, 0));
+            for (int pasada = 0; pasada < 2; pasada++) for (int i = 0; i < 8; i++) {
+                boolean on = sel[i]; if ((pasada == 1) != on) continue;   // los encendidos encima
+                cv.save(); cv.rotate(i * 45); cv.translate(0, -36);
+                relleno.setColor(cols[i]); relleno.setAlpha(on || !alguno ? 255 : 72);
+                cv.drawPath(pet, relleno);
+                if (on) cv.drawPath(pet, borde);
+                cv.restore();
+            }
+            android.graphics.Paint oro = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            oro.setShader(new android.graphics.RadialGradient(0, 0, 44, new int[]{Color.parseColor("#ffe59a"), Color.parseColor("#f7b733"), Color.parseColor("#c9741a")}, new float[]{0, .55f, 1}, android.graphics.Shader.TileMode.CLAMP));
+            cv.drawCircle(0, 0, 44, oro);
+            android.graphics.Paint cua = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG); cua.setColor(Color.argb(120, 122, 67, 16));
+            float lado = 44 * 2 * .70f / 4, q = lado * .70f, rad = q * .22f, x0 = -lado * 2, y0 = -lado * 1.5f + lado * .08f;
+            for (int f = 0; f < 3; f++) for (int c = 0; c < 4; c++) {
+                float cx = x0 + lado * (c + .5f), cy = y0 + lado * (f + .5f);
+                cv.drawRoundRect(cx - q / 2, cy - q / 2, cx + q / 2, cy + q / 2, rad, rad, cua);
+            }
+            cv.restore();
+        }
     }
 }
